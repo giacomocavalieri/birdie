@@ -1,0 +1,5 @@
+---
+version: 1.0.0
+title: snapping a list of numbers
+---
+[ 1, 2, 3, 4 ]
