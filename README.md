@@ -32,6 +32,7 @@ pub fn main() {
 pub fn hello_birdie_test() {
   "🐦‍⬛ Smile for the birdie!"
   |> birdie.snap(title: "my first snapshot")
+  // All snapshots must have a unique title!
 } 
 ```
 

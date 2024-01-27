@@ -64,16 +64,19 @@ type Snapshot(status) {
 
 /// Performs a snapshot test with the given title, saving the content to a new
 /// snapshot file. All your snapshots will be stored in a folder called
-/// `birdie_snapshots` in the project's root.
+/// `birdie_snapshots` in the project's root. 
 /// 
 /// The test will fail if there already is an accepted snapshot with the same
 /// title and a different content.
 /// The test will also fail if there's no accepted snapshot with the same title
 /// to make sure you will review new snapshots as well.
 /// 
-/// > To review all your snapshots interactively you can run
+/// > 🚨 A snapshot is saved to a file named after its title, so all titles
+/// > should be unique! Otherwise you'd end up comparing unrelated snapshots.
+/// 
+/// > 🐦‍⬛ To review all your snapshots interactively you can run
 /// > `gleam run -m birdie`.
-/// >
+/// > 
 /// > To get an help text and all the available options you can run
 /// > `gleam run -m birdie help`.
 /// 

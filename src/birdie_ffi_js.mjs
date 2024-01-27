@@ -13,5 +13,5 @@ export function terminal_width() {
         return new Ok(width);
     } catch { }
 
-    return new Error(null);
+    return new Error(undefined);
 }
