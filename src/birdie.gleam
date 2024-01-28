@@ -64,22 +64,22 @@ type Snapshot(status) {
 
 /// Performs a snapshot test with the given title, saving the content to a new
 /// snapshot file. All your snapshots will be stored in a folder called
-/// `birdie_snapshots` in the project's root. 
-/// 
+/// `birdie_snapshots` in the project's root.
+///
 /// The test will fail if there already is an accepted snapshot with the same
 /// title and a different content.
 /// The test will also fail if there's no accepted snapshot with the same title
 /// to make sure you will review new snapshots as well.
-/// 
+///
 /// > 🚨 A snapshot is saved to a file named after its title, so all titles
 /// > should be unique! Otherwise you'd end up comparing unrelated snapshots.
-/// 
+///
 /// > 🐦‍⬛ To review all your snapshots interactively you can run
 /// > `gleam run -m birdie`.
-/// > 
+/// >
 /// > To get an help text and all the available options you can run
 /// > `gleam run -m birdie help`.
-/// 
+///
 pub fn snap(content content: String, title title: String) -> Nil {
   case do_snap(content, title) {
     Ok(Same) -> Nil
@@ -209,7 +209,7 @@ fn serialise(snapshot: Snapshot(New)) -> String {
 // --- FILE SYSTEM OPERATIONS --------------------------------------------------
 
 /// Save a new snapshot to a given path.
-/// 
+///
 fn save(snapshot: Snapshot(New), to destination: String) -> Result(Nil, Error) {
   // Just to make sure I'm not messing up something anywhere else in the code
   // base: a new snapshot's destination MUST always end with a `.new` extension.
@@ -229,7 +229,7 @@ fn save(snapshot: Snapshot(New), to destination: String) -> Result(Nil, Error) {
 }
 
 /// Read an accepted snapshot which might be missing.
-/// 
+///
 fn read_accepted(source: String) -> Result(Option(Snapshot(Accepted)), Error) {
   case simplifile.read(source) {
     Ok(content) ->
@@ -245,12 +245,12 @@ fn read_accepted(source: String) -> Result(Option(Snapshot(Accepted)), Error) {
 }
 
 /// Read a new snapshot.
-/// 
+///
 /// > ℹ️ Notice the different return type compared to `read_accepted`: when we
 /// > try to read a new snapshot we are sure it's there (because we've listed
 /// > the directory or something else) so if it's not present that's an error
 /// > and we don't return an `Ok(None)`.
-/// 
+///
 fn read_new(source: String) -> Result(Snapshot(New), Error) {
   case simplifile.read(source) {
     Ok(content) ->
@@ -262,7 +262,7 @@ fn read_new(source: String) -> Result(Snapshot(New), Error) {
 
 /// List all the new snapshots in a folder. Every file is automatically
 /// prepended with the folder so you get the full path of each file.
-/// 
+///
 fn list_new_snapshots(in folder: String) -> Result(List(String), Error) {
   case simplifile.read_directory(folder) {
     Error(reason) -> Error(CannotReadSnapshots(reason: reason, folder: folder))
@@ -281,7 +281,7 @@ fn list_new_snapshots(in folder: String) -> Result(List(String), Error) {
 
 /// Finds the snapshots folder at the root of the project the command is run
 /// into. If it's not present the folder is created automatically.
-/// 
+///
 fn find_snapshots_folder() -> Result(String, Error) {
   let result = result.map_error(find_project_root("."), CannotFindProjectRoot)
   use project_root <- result.try(result)
@@ -294,11 +294,11 @@ fn find_snapshots_folder() -> Result(String, Error) {
 }
 
 /// Returns the path to the project's root.
-/// 
+///
 /// > ⚠️ This assumes that this is only ever run inside a Gleam's project and
 /// > sooner or later it will reach a `gleam.toml` file.
 /// > Otherwise this will end up in an infinite loop, I think.
-/// 
+///
 fn find_project_root(path: String) -> Result(String, simplifile.FileError) {
   let manifest = filepath.join(path, "gleam.toml")
   case simplifile.verify_is_file(manifest) {
@@ -323,7 +323,7 @@ fn reject_snapshot(new_snapshot_path: String) -> Result(Nil, Error) {
 
 /// Turns a snapshot's title into a file name stripping it of all dangerous
 /// characters (or at least those I could think ok 😁).
-/// 
+///
 fn file_name(title: String) -> String {
   string.replace(each: "/", with: " ", in: title)
   |> string.replace(each: "\\", with: " ")
@@ -336,13 +336,13 @@ fn file_name(title: String) -> String {
 }
 
 /// Returns the path where a new snapshot should be saved.
-/// 
+///
 fn new_destination(snapshot: Snapshot(New), folder: String) -> String {
   filepath.join(folder, file_name(snapshot.title)) <> ".new"
 }
 
 /// Strips the extension of a file (if it has one).
-/// 
+///
 fn strip_extension(file: String) -> String {
   case filepath.extension(file) {
     Ok(extension) -> string.drop_right(file, string.length(extension) + 1)
@@ -352,7 +352,7 @@ fn strip_extension(file: String) -> String {
 
 /// Turns a new snapshot path into the path of the corresponding accepted
 /// snapshot.
-/// 
+///
 fn to_accepted_path(file: String) -> String {
   // This just replaces the `.new` extension with the `.accepted` one.
   strip_extension(file) <> ".accepted"
@@ -542,7 +542,7 @@ fn pretty_info_line(line: InfoLine, width: Int) -> String {
   }
 
   // This is an ugly hack that I need because `glam` currently doesn't take into
-  // account color codes. 
+  // account color codes.
   // Those are invisible but still contribute to the length of a string, so I
   // have to artifically set the width to a higher limit to take into account
   // the length of the color codes added to the lines' titles.
@@ -591,9 +591,19 @@ fn pretty_diff_line(diff_line: DiffLine, padding: Int) -> String {
 
 // --- CLI COMMAND -------------------------------------------------------------
 
-@deprecated("🚨 This is the entry point of the CLI tool.
-You should never call this function yourself, you should run `gleam run -m birdie` instead.
-Expect this function to disappear from the public API on future releases!")
+/// Reviews the snapshots in the project's folder.
+/// This function will behave differently depending on the command line
+/// arguments provided to the program.
+/// To have a look at all the available options you can run
+/// `gleam run -m birdie help`.
+///
+/// > 🐦‍⬛ The recommended workflow is to first run your gleeunit tests with
+/// > `gleam test` and then review any new/failing snapshot manually running
+/// > `gleam run -m birdie`.
+/// >
+/// > And don't forget to commit your snapshots! Those should be treated as code
+/// > and checked with the vcs you're using.
+///
 pub fn main() -> Nil {
   case argv.load().arguments {
     [] | ["review"] -> report_status(review())
@@ -678,7 +688,7 @@ fn do_review(
 }
 
 /// The choice the user can make when reviewing a snapshot.
-/// 
+///
 type ReviewChoice {
   AcceptSnapshot
   RejectSnapshot
@@ -688,7 +698,7 @@ type ReviewChoice {
 /// Asks the user to make a choice: it first prints a reminder of the options
 /// and waits for the user to choose one.
 /// Will prompt again if the choice is not amongst the possible options.
-/// 
+///
 fn ask_choice() -> Result(ReviewChoice, Error) {
   io.println(
     ansi.bold(ansi.green("  a"))
@@ -792,17 +802,17 @@ fn report_status(result: Result(Nil, Error)) -> Nil {
 // --- FFI ---------------------------------------------------------------------
 
 /// Clear the screen.
-/// 
+///
 @external(erlang, "birdie_ffi_erl", "clear")
 fn clear() -> Nil
 
 /// Move the cursor up a given number of lines.
-/// 
+///
 @external(erlang, "birdie_ffi_erl", "cursor_up")
 fn cursor_up(n: Int) -> Nil
 
 /// Clear the line the cursor is currently on.
-/// 
+///
 @external(erlang, "birdie_ffi_erl", "clear_line")
 fn clear_line() -> Nil
 
