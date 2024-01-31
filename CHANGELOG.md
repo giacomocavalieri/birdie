@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- 🧑🏻‍💻 Improve diffs look
+
 ## v1.0.2 - 2024-01-28
 
 - 📝 Improve `birdie.main` documentation

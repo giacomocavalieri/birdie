@@ -1,0 +1,12 @@
+---
+version: 1.0.2
+title: diffing a case expression
+---
+case foo(bar, baz) {
+  True ->
+    io.println("Phew, we don't have to launch the missiles...")
+  False -> {
+    io.println("Not foo!")
+    launch_missiles()
+  }
+}
