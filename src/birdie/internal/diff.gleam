@@ -66,6 +66,9 @@ fn match_diff_lines(
 }
 
 /// Find the least common subsequences of shared items between two lists.
+///
+/// Reference: https://tiarkrompf.github.io/notes/?/diff-algorithm/
+///
 fn lcs(one: List(a), other: List(a)) -> List(a) {
   // The recursive definition is so intuitive and elegant, just please don't
   // look at how `lowest_occurrence_common_item` is defined.
