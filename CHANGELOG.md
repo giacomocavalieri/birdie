@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.0.3 - 2024-02-01
 
 - 🧑🏻‍💻 Improve diffs look
 

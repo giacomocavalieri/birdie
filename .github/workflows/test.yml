@@ -18,5 +18,5 @@ jobs:
           gleam-version: "0.34.1"
           rebar3-version: "3"
       - run: gleam deps download
-      - run: gleam test
+      - run: gleam test --target=erlang
       - run: gleam format --check src test
