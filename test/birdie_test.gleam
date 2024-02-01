@@ -20,3 +20,15 @@ pub fn list_test() {
   "[ 1, 2, 3, 4 ]"
   |> birdie.snap(title: "snapping a list of numbers")
 }
+
+pub fn complex_function_test() {
+  "case foo(bar, baz) {
+  True ->
+    io.println(\"Phew, we don't have to launch the missiles...\")
+  False -> {
+    io.println(\"Not foo!\")
+    launch_missiles()
+  }
+}"
+  |> birdie.snap(title: "diffing a case expression")
+}

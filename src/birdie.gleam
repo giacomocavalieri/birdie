@@ -157,7 +157,7 @@ fn to_diff_lines(
 ) -> List(DiffLine) {
   let Snapshot(title: _, content: accepted_content) = accepted
   let Snapshot(title: _, content: new_content) = new
-  diff.line_by_line(accepted_content, new_content)
+  diff.histogram(accepted_content, new_content)
 }
 
 // --- SNAPSHOT (DE)SERIALISATION ----------------------------------------------
