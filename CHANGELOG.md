@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.0.4 - 2024-02-01
+
+- ➖ Drop the `glam` dependency
+
 ## v1.0.3 - 2024-02-01
 
 - 🧑🏻‍💻 Improve diffs look

@@ -10,7 +10,6 @@ import gleam_community/ansi
 import argv
 import birdie/internal/diff.{type DiffLine, DiffLine}
 import filepath
-import glam/doc
 import gleeunit/should
 import justin
 import rank
@@ -508,53 +507,23 @@ fn pretty_box(
 }
 
 fn pretty_info_line(line: InfoLine, width: Int) -> String {
-  let title_length = case line {
-    InfoLineWithNoTitle(..) -> 2
-    InfoLineWithTitle(title: title, ..) -> string.length(title)
+  let prefix = case line {
+    InfoLineWithNoTitle(..) -> "  "
+    InfoLineWithTitle(title: title, ..) -> "  " <> title <> ": "
   }
-
-  let line_doc = case line.split {
-    DoNotSplit -> doc.from_string(line.content)
+  let prefix_length = string.length(prefix)
+  case line.split {
+    Truncate -> prefix <> truncate(line.content, width - prefix_length)
+    DoNotSplit -> prefix <> line.content
     SplitWords ->
-      string.split(line.content, on: "\n")
-      |> list.map(fn(line) {
-        string.split(line, on: " ")
-        |> list.map(doc.from_string)
-        |> doc.join(with: doc.flex_space)
-      })
-      |> doc.join(with: doc.line)
-      |> doc.group
-      |> doc.nest(by: title_length + 4)
-
-    Truncate -> {
-      let max_content_length = width - title_length - 6
-      let content_length = string.length(line.content)
-      case content_length > max_content_length {
-        False -> doc.from_string(line.content)
-        True ->
-          string.to_graphemes(line.content)
-          |> list.take(max_content_length - 3)
-          |> string.join(with: "")
-          |> string.append("...")
-          |> doc.from_string
+      case to_lines(line.content, width - prefix_length) {
+        [] -> prefix
+        [line, ..lines] -> {
+          use acc, line <- list.fold(over: lines, from: prefix <> line)
+          acc <> "\n" <> string.repeat(" ", prefix_length) <> line
+        }
       }
-    }
   }
-
-  // This is an ugly hack that I need because `glam` currently doesn't take into
-  // account color codes.
-  // Those are invisible but still contribute to the length of a string, so I
-  // have to artifically set the width to a higher limit to take into account
-  // the length of the color codes added to the lines' titles.
-  let ansi_code_len = 7
-
-  case line {
-    InfoLineWithNoTitle(..) -> doc.from_string("  ")
-    InfoLineWithTitle(title: title, ..) ->
-      doc.from_string(ansi.blue("  " <> title <> ": "))
-  }
-  |> doc.append(line_doc)
-  |> doc.to_string(width + ansi_code_len)
 }
 
 fn pretty_diff_line(diff_line: DiffLine, padding: Int) -> String {
@@ -587,6 +556,55 @@ fn pretty_diff_line(diff_line: DiffLine, padding: Int) -> String {
   }
 
   pretty_number <> separator <> pretty_line
+}
+
+// --- STRING UTILITIES --------------------------------------------------------
+
+fn truncate(string: String, max_length: Int) -> String {
+  case string.length(string) > max_length {
+    False -> string
+    True ->
+      string.to_graphemes(string)
+      |> list.take(max_length - 3)
+      |> string.join(with: "")
+      |> string.append("...")
+  }
+}
+
+fn to_lines(string: String, max_length: Int) -> List(String) {
+  // We still want to keep the original lines, so we work line by line.
+  use line <- list.flat_map(string.split(string, on: "\n"))
+  let words = string.split(line, on: " ")
+  do_to_lines([], "", 0, words, max_length)
+}
+
+fn do_to_lines(
+  lines: List(String),
+  line: String,
+  line_length: Int,
+  words: List(String),
+  max_length: Int,
+) -> List(String) {
+  case words {
+    [] ->
+      case line == "" {
+        True -> list.reverse(lines)
+        False -> list.reverse([line, ..lines])
+      }
+
+    [word, ..rest] -> {
+      let word_length = string.length(word)
+      let new_line_length = word_length + line_length + 1
+      // ^ With the +1 we account for the whitespace that separates words!
+      case new_line_length > max_length {
+        True -> do_to_lines([line, ..lines], "", 0, words, max_length)
+        False -> {
+          let new_line = line <> " " <> word
+          do_to_lines(lines, new_line, new_line_length, rest, max_length)
+        }
+      }
+    }
+  }
 }
 
 // --- CLI COMMAND -------------------------------------------------------------

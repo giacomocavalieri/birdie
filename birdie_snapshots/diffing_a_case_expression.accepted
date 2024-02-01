@@ -1,5 +1,5 @@
 ---
-version: 1.0.2
+version: 1.0.3
 title: diffing a case expression
 ---
 case foo(bar, baz) {
