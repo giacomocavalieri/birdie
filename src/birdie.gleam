@@ -9,6 +9,7 @@ import gleam/string
 import gleam_community/ansi
 import argv
 import birdie/internal/diff.{type DiffLine, DiffLine}
+import birdie/internal/project
 import filepath
 import gleeunit/should
 import justin
@@ -282,28 +283,13 @@ fn list_new_snapshots(in folder: String) -> Result(List(String), Error) {
 /// into. If it's not present the folder is created automatically.
 ///
 fn find_snapshots_folder() -> Result(String, Error) {
-  let result = result.map_error(find_project_root("."), CannotFindProjectRoot)
+  let result = result.map_error(project.find_root(), CannotFindProjectRoot)
   use project_root <- result.try(result)
   let snapshots_folder = filepath.join(project_root, birdie_snapshots_folder)
 
   case simplifile.create_directory(snapshots_folder) {
     Ok(Nil) | Error(simplifile.Eexist) -> Ok(snapshots_folder)
     Error(error) -> Error(CannotCreateSnapshotsFolder(error))
-  }
-}
-
-/// Returns the path to the project's root.
-///
-/// > ⚠️ This assumes that this is only ever run inside a Gleam's project and
-/// > sooner or later it will reach a `gleam.toml` file.
-/// > Otherwise this will end up in an infinite loop, I think.
-///
-fn find_project_root(path: String) -> Result(String, simplifile.FileError) {
-  let manifest = filepath.join(path, "gleam.toml")
-  case simplifile.verify_is_file(manifest) {
-    Ok(True) -> Ok(path)
-    Ok(False) -> find_project_root(filepath.join(path, ".."))
-    Error(reason) -> Error(reason)
   }
 }
 
