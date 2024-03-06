@@ -33,7 +33,7 @@ pub fn hello_birdie_test() {
   "🐦‍⬛ Smile for the birdie!"
   |> birdie.snap(title: "my first snapshot")
   // All snapshots must have a unique title!
-} 
+}
 ```
 
 This will record a new snapshot with the given title and content. A snapshot
@@ -63,6 +63,51 @@ review all your new snapshots.
 > `gleam run -m birdie help`
 
 ![image](https://github.com/giacomocavalieri/birdie/blob/main/birdie.gif?raw=true)
+
+## FAQ
+
+### What should my snapshots be named like?
+
+A good idea is to give snapshots long descriptive titles that clearly state
+what you're expecting to see when reviewing those.
+Also all snapshots _must_ have unique names so that birdie won't mix those up,
+so be careful when naming snapshots to not repeat the same title twice!
+
+### How big should the snapshot's content be?
+
+My recommendation is strive to have small and cohesive snapshots. Each
+snapshot test should test one thing and one thing only. Having small snapshots
+will make your life way easier during the review process!
+It's better to review 10 small snpashots than a single huge one and you'll
+see better, more focused diffs.
+
+### Why is the snapshot content a `String`? I want to snapshot other things!
+
+Birdie will only ever accept `String` values and it's up to you to turn your
+own Gleam types into a `String` before snapping those: this way you have total
+freedom and will be able to choose a format that makes sense to you and makes
+things easier to review!
+
+If you don't want to write serialisers for yourself and are ok with a default
+look then I recommend you try using the [`pprint`](https://hexdocs.pm/pprint/)
+package.
+It's an awesome package that can turn any Gleam type into a pretty string that
+will work perfectly with Birdie and produce nice diffs out of the box.
+I'm sure most of the times you won't feel the need to use anything else!
+
+```gleam
+import birdie
+import pprint
+
+pub fn a_snapshot_test() {
+  Ok([1, 2, 3])
+  |> pprint.format
+  // ^^^^^^^^^^^^^
+  // pprint does all the hard work of turning
+  // any value into a pretty string!
+  |> birdie.snap(title: "a snapshot test using pprint's output")
+}
+```
 
 ## References
 
