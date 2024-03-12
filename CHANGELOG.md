@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.1.0 - 2024-03-12
 
 - ✨ Fail the review if there's tests with duplicate titles
 

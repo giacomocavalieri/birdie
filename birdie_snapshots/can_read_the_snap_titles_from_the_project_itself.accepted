@@ -1,5 +1,5 @@
 ---
-version: 1.0.4
+version: 1.1.0
 title: can read the snap titles from the project itself
 file: ./test/titles_test.gleam
 test_name: can_read_the_snap_titles_from_the_project_itself_test
