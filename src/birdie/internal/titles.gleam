@@ -45,7 +45,7 @@ pub type Error {
   TestModuleIsNotCompiling(file: String)
   CannotReadTestDirectory(reason: simplifile.FileError)
   CannotReadTestFile(reason: simplifile.FileError, file: String)
-  ParseError(glance.Error)
+  ParseError(reason: glance.Error)
   DuplicateLiteralTitles(title: String, one: TestInfo, other: TestInfo)
   OverlappingPrefixes(
     prefix: String,

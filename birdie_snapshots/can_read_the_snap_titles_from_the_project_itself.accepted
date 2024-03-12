@@ -1,6 +1,8 @@
 ---
 version: 1.0.4
 title: can read the snap titles from the project itself
+file: ./test/titles_test.gleam
+test_name: can_read_the_snap_titles_from_the_project_itself_test
 ---
 --- LITERALS ---
 can find literal titles when calling `birdie.snap` [can_find_literal_titles_when_calling_birdie_snap_test - ./test/titles_test.gleam]

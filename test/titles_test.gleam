@@ -44,29 +44,29 @@ pub fn direct_call() {
 }
 "
 
-const module_with_prefixes = "
-{{birdie_import}}
-
-pub fn in_pipeline_with_piped_content() {
-  some_content
-  |> in_a_pipeline
-  |> with_some_steps
-  |> {{snap_invocation}}(title: \"in pipeline with label\" <> x)
-
-  some_content
-  |> in_a_pipeline
-  |> with_some_steps
-  |> {{snap_invocation}}(\"without label\" <> x)
-}
-
-pub fn direct_call() {
-  {{snap_invocation}}(\"content\", \"with no labels\" <> x)
-  {{snap_invocation}}(content: \"content\", title: \"with labels\" <> x)
-  {{snap_invocation}}(\"content\", title: \"with just title label\" <> x)
-  {{snap_invocation}}(\"with just content label\" <> x, content: \"content\")
-  {{snap_invocation}}(title: \"with swapped labels\" <> x, content: \"content\")
-}
-"
+//const module_with_prefixes = "
+//{{birdie_import}}
+//
+//pub fn in_pipeline_with_piped_content() {
+//  some_content
+//  |> in_a_pipeline
+//  |> with_some_steps
+//  |> {{snap_invocation}}(title: \"in pipeline with label\" <> x)
+//
+//  some_content
+//  |> in_a_pipeline
+//  |> with_some_steps
+//  |> {{snap_invocation}}(\"without label\" <> x)
+//}
+//
+//pub fn direct_call() {
+//  {{snap_invocation}}(\"content\", \"with no labels\" <> x)
+//  {{snap_invocation}}(content: \"content\", title: \"with labels\" <> x)
+//  {{snap_invocation}}(\"content\", title: \"with just title label\" <> x)
+//  {{snap_invocation}}(\"with just content label\" <> x, content: \"content\")
+//  {{snap_invocation}}(title: \"with swapped labels\" <> x, content: \"content\")
+//}
+//"
 
 fn assert_error(module: String) -> titles.Error {
   let assert Ok(module) = glance.module(module)
