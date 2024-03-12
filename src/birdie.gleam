@@ -9,6 +9,8 @@ import gleam/string
 import gleam_community/ansi
 import argv
 import birdie/internal/diff.{type DiffLine, DiffLine}
+import birdie/internal/project
+import birdie/internal/titles
 import filepath
 import gleeunit/should
 import justin
@@ -47,6 +49,8 @@ type Error {
   CorruptedSnapshot(source: String)
 
   CannotFindProjectRoot(reason: simplifile.FileError)
+
+  CannotGetTitles(reason: titles.Error)
 }
 
 // --- THE SNAPSHOT TYPE -------------------------------------------------------
@@ -56,7 +60,7 @@ type New
 type Accepted
 
 type Snapshot(status) {
-  Snapshot(title: String, content: String)
+  Snapshot(title: String, content: String, info: Option(titles.TestInfo))
 }
 
 // --- SNAP --------------------------------------------------------------------
@@ -122,7 +126,19 @@ fn do_snap(content: String, title: String) -> Result(Outcome, Error) {
   // be run from any subfolder we can't just assume we're in the project's root.
   use folder <- result.try(find_snapshots_folder())
 
-  let new = Snapshot(title: title, content: content)
+  // 🚨 When snapping with the `snap` function we don't try and get the test
+  // info from the file it's defined in. That would require re-parsing the test
+  // directory every single time the `snap` function is called. We just put the
+  // `info` field to `None`.
+  //
+  // That additional data will be retrieved and updated during the review
+  // process where the parsing of the test directory can be done just once for
+  // all the tests.
+  //
+  // 💡 TODO: I could investigate using a shared cache or something but it
+  //          sounds like a pain to implement and should have to work for both
+  //          targets.
+  let new = Snapshot(title: title, content: content, info: None)
   let new_snapshot_path = new_destination(new, folder)
   let accepted_snapshot_path = to_accepted_path(new_snapshot_path)
 
@@ -154,54 +170,79 @@ fn to_diff_lines(
   accepted: Snapshot(Accepted),
   new: Snapshot(New),
 ) -> List(DiffLine) {
-  let Snapshot(title: _, content: accepted_content) = accepted
-  let Snapshot(title: _, content: new_content) = new
+  let Snapshot(title: _, content: accepted_content, info: _) = accepted
+  let Snapshot(title: _, content: new_content, info: _) = new
   diff.histogram(accepted_content, new_content)
 }
 
 // --- SNAPSHOT (DE)SERIALISATION ----------------------------------------------
 
+fn split_n(
+  string,
+  times n: Int,
+  on separator: String,
+) -> Result(#(List(String), String), Nil) {
+  case n <= 0 {
+    True -> Ok(#([], string))
+    False -> {
+      use #(line, rest) <- result.try(string.split_once(string, on: separator))
+      use #(lines, rest) <- result.try(split_n(rest, n - 1, separator))
+      Ok(#([line, ..lines], rest))
+    }
+  }
+}
+
 fn deserialise(raw: String) -> Result(Snapshot(a), Nil) {
-  // Check there's the opening `---`
-  use #(open_line, rest) <- result.try(string.split_once(raw, "\n"))
-  use <- bool.guard(when: open_line != "---", return: Error(Nil))
-
-  // For now I have no use of the version but it might come in handy in the
-  // future if I decide to change the snapshots' metadata's format.
-  use #(version_line, rest) <- result.try(string.split_once(rest, "\n"))
-  use _version <- result.try(case version_line {
-    "version: " <> version -> Ok(version)
-    _ -> Error(Nil)
-  })
-
-  // Get the title.
-  use #(title_line, rest) <- result.try(string.split_once(rest, "\n"))
-  use title <- result.try(case title_line {
-    // We unescape the newlines
-    "title: " <> title -> Ok(string.replace(title, each: "\\n", with: "\n"))
-    _ -> Error(Nil)
-  })
-
-  // Check there's the closing `---`
-  use #(close_line, content) <- result.try(string.split_once(rest, "\n"))
-  use <- bool.guard(when: close_line != "---", return: Error(Nil))
-
-  Ok(Snapshot(title: title, content: content))
+  case split_n(raw, 4, "\n") {
+    Ok(#(["---", "version: " <> _, "title: " <> title, "---"], content)) ->
+      Ok(Snapshot(title: title, content: content, info: None))
+    Ok(_) | Error(_) ->
+      case split_n(raw, 6, "\n") {
+        Ok(#(
+          [
+            "---",
+            "version: " <> _,
+            "title: " <> title,
+            "file: " <> file,
+            "test_name: " <> test_name,
+            "---",
+          ],
+          content,
+        )) ->
+          Ok(Snapshot(
+            title: title,
+            content: content,
+            info: Some(titles.TestInfo(file: file, test_name: test_name)),
+          ))
+        Ok(_) | Error(_) -> Error(Nil)
+      }
+  }
 }
 
 fn serialise(snapshot: Snapshot(New)) -> String {
-  let Snapshot(title: title, content: content) = snapshot
+  let Snapshot(title: title, content: content, info: info) = snapshot
+  let info_lines = case info {
+    None -> []
+    Some(titles.TestInfo(file: file, test_name: test_name)) -> [
+      "file: " <> file,
+      "test_name: " <> test_name,
+    ]
+  }
+
   [
-    "---",
-    "version: " <> birdie_version,
-    // We escape the newlines in the title so that it fits on one line and it's
-    // easier to parse.
-    // Is this the best course of action? Probably not.
-    // Does this make my life a lot easier? Absolutely! 😁
-    "title: " <> string.replace(title, each: "\n", with: "\\n"),
-    "---",
-    content,
+    [
+      "---",
+      "version: " <> birdie_version,
+      // We escape the newlines in the title so that it fits on one line and it's
+      // easier to parse.
+      // Is this the best course of action? Probably not.
+      // Does this make my life a lot easier? Absolutely! 😁
+      "title: " <> string.replace(title, each: "\n", with: "\\n"),
+    ],
+    info_lines,
+    ["---", content],
   ]
+  |> list.concat
   |> string.join(with: "\n")
 }
 
@@ -282,7 +323,7 @@ fn list_new_snapshots(in folder: String) -> Result(List(String), Error) {
 /// into. If it's not present the folder is created automatically.
 ///
 fn find_snapshots_folder() -> Result(String, Error) {
-  let result = result.map_error(find_project_root("."), CannotFindProjectRoot)
+  let result = result.map_error(project.find_root(), CannotFindProjectRoot)
   use project_root <- result.try(result)
   let snapshots_folder = filepath.join(project_root, birdie_snapshots_folder)
 
@@ -292,25 +333,36 @@ fn find_snapshots_folder() -> Result(String, Error) {
   }
 }
 
-/// Returns the path to the project's root.
-///
-/// > ⚠️ This assumes that this is only ever run inside a Gleam's project and
-/// > sooner or later it will reach a `gleam.toml` file.
-/// > Otherwise this will end up in an infinite loop, I think.
-///
-fn find_project_root(path: String) -> Result(String, simplifile.FileError) {
-  let manifest = filepath.join(path, "gleam.toml")
-  case simplifile.verify_is_file(manifest) {
-    Ok(True) -> Ok(path)
-    Ok(False) -> find_project_root(filepath.join(path, ".."))
-    Error(reason) -> Error(reason)
-  }
-}
-
-fn accept_snapshot(new_snapshot_path: String) -> Result(Nil, Error) {
+fn accept_snapshot(
+  new_snapshot_path: String,
+  titles: titles.Titles,
+) -> Result(Nil, Error) {
+  use snapshot <- result.try(read_new(new_snapshot_path))
+  let Snapshot(title: title, content: content, info: _) = snapshot
   let accepted_snapshot_path = to_accepted_path(new_snapshot_path)
-  simplifile.rename_file(new_snapshot_path, accepted_snapshot_path)
-  |> result.map_error(CannotAcceptSnapshot(_, new_snapshot_path))
+
+  case titles.find(titles, title) {
+    // We could find additional info about the test so we add it to the snapshot
+    // before saving it! So we delete the `new` file and write an `accepted`
+    // one with all the new info we found.
+    Ok(titles.Literal(info)) | Ok(titles.Prefix(info, _)) -> {
+      let delete_new_snapshot =
+        simplifile.delete(new_snapshot_path)
+        |> result.map_error(CannotAcceptSnapshot(_, new_snapshot_path))
+      use _ <- result.try(delete_new_snapshot)
+
+      Snapshot(title: title, content: content, info: Some(info))
+      |> serialise
+      |> simplifile.write(to: accepted_snapshot_path)
+      |> result.map_error(CannotAcceptSnapshot(_, accepted_snapshot_path))
+    }
+
+    Error(_) ->
+      // Birdie couldn't find any additional info about the given test, so
+      // we can just move the `new` snapshot to the `accepted` one.
+      simplifile.rename_file(new_snapshot_path, accepted_snapshot_path)
+      |> result.map_error(CannotAcceptSnapshot(_, new_snapshot_path))
+  }
 }
 
 fn reject_snapshot(new_snapshot_path: String) -> Result(Nil, Error) {
@@ -340,21 +392,12 @@ fn new_destination(snapshot: Snapshot(New), folder: String) -> String {
   filepath.join(folder, file_name(snapshot.title)) <> ".new"
 }
 
-/// Strips the extension of a file (if it has one).
-///
-fn strip_extension(file: String) -> String {
-  case filepath.extension(file) {
-    Ok(extension) -> string.drop_right(file, string.length(extension) + 1)
-    Error(Nil) -> file
-  }
-}
-
 /// Turns a new snapshot path into the path of the corresponding accepted
 /// snapshot.
 ///
 fn to_accepted_path(file: String) -> String {
   // This just replaces the `.new` extension with the `.accepted` one.
-  strip_extension(file) <> ".accepted"
+  filepath.strip_extension(file) <> ".accepted"
 }
 
 // --- PRETTY PRINTING ---------------------------------------------------------
@@ -363,17 +406,17 @@ fn explain(error: Error) -> Nil {
   let heading = fn(reason) { "[" <> ansi.bold(string.inspect(reason)) <> "] " }
   let message = case error {
     CannotCreateSnapshotsFolder(reason: reason) ->
-      heading(reason) <> "I couldn't create the snapshots folder"
+      heading(reason) <> "I couldn't create the snapshots folder."
 
     CannotReadAcceptedSnapshot(reason: reason, source: source) ->
       heading(reason)
       <> "I couldn't read the accepted snapshot from "
-      <> ansi.italic("\"" <> source <> "\"\n")
+      <> ansi.italic("\"" <> source <> "\".")
 
     CannotReadNewSnapshot(reason: reason, source: source) ->
       heading(reason)
       <> "I couldn't read the new snapshot from "
-      <> ansi.italic("\"" <> source <> "\"\n")
+      <> ansi.italic("\"" <> source <> "\".")
 
     CannotSaveNewSnapshot(
       reason: reason,
@@ -384,37 +427,100 @@ fn explain(error: Error) -> Nil {
       <> "I couldn't save the snapshot "
       <> ansi.italic("\"" <> title <> "\" ")
       <> "to "
-      <> ansi.italic("\"" <> destination <> "\"\n")
+      <> ansi.italic("\"" <> destination <> "\".")
 
     CannotReadSnapshots(reason: reason, folder: _) ->
-      heading(reason) <> "I couldn't read the snapshots directory's contents"
+      heading(reason) <> "I couldn't read the snapshots folder's contents."
 
     CannotRejectSnapshot(reason: reason, snapshot: snapshot) ->
       heading(reason)
-      <> "I couldn't reject the snapshot"
-      <> ansi.italic("\"" <> snapshot <> "\" ")
+      <> "I couldn't reject the snapshot "
+      <> ansi.italic("\"" <> snapshot <> "\".")
 
     CannotAcceptSnapshot(reason: reason, snapshot: snapshot) ->
       heading(reason)
-      <> "I couldn't accept the snapshot"
-      <> ansi.italic("\"" <> snapshot <> "\" ")
+      <> "I couldn't accept the snapshot "
+      <> ansi.italic("\"" <> snapshot <> "\".")
 
-    CannotReadUserInput -> "I couldn't read the user input"
+    CannotReadUserInput -> "I couldn't read the user input."
 
     CorruptedSnapshot(source: source) ->
       "It looks like "
       <> ansi.italic("\"" <> source <> "\"\n")
-      <> " is not a valid snapshot.\n"
+      <> "is not a valid snapshot.\n"
       <> "This might happen when someone modifies its content.\n"
       <> "Try deleting the snapshot and recreating it."
 
-    CannotFindProjectRoot(reason: reason) ->
+    CannotFindProjectRoot(reason: reason)
+    | CannotGetTitles(titles.CannotFindProjectRoot(reason: reason)) ->
       heading(reason)
       <> "I couldn't locate the project's root where the snapshot's"
       <> " folder should be."
+
+    CannotGetTitles(titles.TestModuleIsNotCompiling(file: file)) ->
+      "The test file "
+      <> ansi.italic("\"" <> file <> "\"\n")
+      <> " is not compiling.\n"
+      <> "All your test should be compiling for Birdie to work!"
+
+    CannotGetTitles(titles.CannotReadTestDirectory(reason: reason)) ->
+      heading(reason) <> "I couldn't list the contents of the test folder."
+
+    CannotGetTitles(titles.CannotReadTestFile(reason: reason, file: file)) ->
+      heading(reason)
+      <> "I couldn't read the test file "
+      <> ansi.italic("\"" <> file <> "\"\n")
+
+    CannotGetTitles(titles.ParseError(reason: _reason)) ->
+      "I couldn't parse the content of your test modules.\n"
+      <> "This most likely is a bug in Birdie, it would be grand if you could"
+      <> "open an issue on GitHub:\n"
+      <> "\"https://github.com/giacomocavalieri/birdie/issues\""
+
+    CannotGetTitles(titles.DuplicateLiteralTitles(
+      title: title,
+      one: titles.TestInfo(file: one_file, test_name: one_test_name),
+      other: titles.TestInfo(file: other_file, test_name: other_test_name),
+    )) -> {
+      let same_file = one_file == other_file
+      let same_function = one_test_name == other_test_name
+      let location = case same_file, same_function {
+        True, True ->
+          "Both tests are defined in:\n\n  "
+          <> ansi.italic(to_function_name(one_file, one_test_name))
+        _, _ ->
+          "One test is defined in:\n\n  "
+          <> ansi.italic(to_function_name(one_file, one_test_name))
+          <> "\n\nWhile the other is defined in:\n\n  "
+          <> ansi.italic(to_function_name(other_file, other_test_name))
+      }
+
+      "It looks like there's some snapshot tests sharing the same title:
+
+  " <> ansi.italic("\"" <> title <> "\"") <> "
+
+Snapshot titles " <> ansi.bold("must be unique") <> " or you would run into strange diffs
+when reviewing them, try changing one of those.
+" <> location
+    }
+
+    CannotGetTitles(titles.OverlappingPrefixes(..)) ->
+      panic as "Prefixes are not implemented yet"
+
+    CannotGetTitles(titles.PrefixOverlappingWithLiteralTitle(..)) ->
+      panic as "Prefixes are not implemented yet"
   }
 
-  io.println_error("❌ " <> ansi.red(message))
+  io.println_error("❌ " <> message)
+}
+
+fn to_function_name(file: String, function_name: String) -> String {
+  let module_name = case file {
+    "./test/" <> rest -> filepath.strip_extension(rest)
+    _ -> filepath.strip_extension(file)
+  }
+
+  module_name <> ".{" <> function_name <> "}"
 }
 
 type InfoLine {
@@ -428,11 +534,23 @@ type Split {
   Truncate
 }
 
+fn snapshot_default_lines(snapshot: Snapshot(status)) -> List(InfoLine) {
+  let Snapshot(title: title, content: _, info: info) = snapshot
+  case info {
+    None -> [InfoLineWithTitle(title, SplitWords, "title")]
+    Some(titles.TestInfo(file: file, test_name: test_name)) -> [
+      InfoLineWithTitle(title, SplitWords, "title"),
+      InfoLineWithTitle(file, Truncate, "file"),
+      InfoLineWithTitle(test_name, Truncate, "name"),
+    ]
+  }
+}
+
 fn new_snapshot_box(
   snapshot: Snapshot(New),
   additional_info_lines: List(InfoLine),
 ) -> String {
-  let Snapshot(title: title, content: content) = snapshot
+  let Snapshot(title: _, content: content, info: _) = snapshot
 
   let content =
     string.split(content, on: "\n")
@@ -440,10 +558,11 @@ fn new_snapshot_box(
       DiffLine(number: i + 1, line: line, kind: diff.New)
     })
 
-  pretty_box("new snapshot", content, [
-    InfoLineWithTitle(title, SplitWords, "title"),
-    ..additional_info_lines
-  ])
+  pretty_box(
+    "new snapshot",
+    content,
+    list.concat([snapshot_default_lines(snapshot), additional_info_lines]),
+  )
 }
 
 fn diff_snapshot_box(
@@ -455,7 +574,7 @@ fn diff_snapshot_box(
     "mismatched snapshots",
     to_diff_lines(accepted, new),
     [
-      [InfoLineWithTitle(new.title, SplitWords, "title")],
+      snapshot_default_lines(accepted),
       additional_info_lines,
       [
         InfoLineWithNoTitle("", DoNotSplit),
@@ -507,11 +626,16 @@ fn pretty_box(
 }
 
 fn pretty_info_line(line: InfoLine, width: Int) -> String {
-  let prefix = case line {
-    InfoLineWithNoTitle(..) -> "  "
-    InfoLineWithTitle(title: title, ..) -> "  " <> title <> ": "
+  let #(prefix, prefix_length) = case line {
+    InfoLineWithNoTitle(..) -> #("  ", 2)
+    InfoLineWithTitle(title: title, ..) -> #(
+      "  "
+      <> ansi.blue(title <> ": "),
+      string.length(title)
+      + 4,
+    )
   }
-  let prefix_length = string.length(prefix)
+
   case line.split {
     Truncate -> prefix <> truncate(line.content, width - prefix_length)
     DoNotSplit -> prefix <> line.content
@@ -599,7 +723,10 @@ fn do_to_lines(
       case new_line_length > max_length {
         True -> do_to_lines([line, ..lines], "", 0, words, max_length)
         False -> {
-          let new_line = line <> " " <> word
+          let new_line = case line {
+            "" -> word
+            _ -> line <> " " <> word
+          }
           do_to_lines(lines, new_line, new_line_length, rest, max_length)
         }
       }
@@ -635,6 +762,10 @@ pub fn main() -> Nil {
 
 fn review() -> Result(Nil, Error) {
   use snapshots_folder <- result.try(find_snapshots_folder())
+
+  let get_titles = titles.from_test_directory()
+  use titles <- result.try(result.map_error(get_titles, CannotGetTitles))
+
   use new_snapshots <- result.try(list_new_snapshots(in: snapshots_folder))
   case list.length(new_snapshots) {
     // If there's no snapshots to review, we're done!
@@ -644,7 +775,7 @@ fn review() -> Result(Nil, Error) {
     }
     // If there's snapshots to review start the interactive session.
     n -> {
-      let result = do_review(new_snapshots, 1, n)
+      let result = do_review(new_snapshots, titles, 1, n)
       // Despite the review process ending well or with an error, we want to
       // clear the screen of any garbage before showing the error explanation
       // or the happy completion string.
@@ -663,6 +794,7 @@ fn review() -> Result(Nil, Error) {
 
 fn do_review(
   new_snapshot_paths: List(String),
+  titles: titles.Titles,
   current: Int,
   out_of: Int,
 ) -> Result(Nil, Error) {
@@ -673,6 +805,16 @@ fn do_review(
       // We try reading the new snapshot and the accepted one (which might be
       // missing).
       use new_snapshot <- result.try(read_new(new_snapshot_path))
+
+      // We need to add to the new test info about its location and the function
+      // it's defined in.
+      let new_snapshot_info = case titles.find(titles, new_snapshot.title) {
+        Ok(titles.Prefix(info: info, ..)) | Ok(titles.Literal(info: info)) ->
+          Some(info)
+        Error(_) -> None
+      }
+      let new_snapshot = Snapshot(..new_snapshot, info: new_snapshot_info)
+
       let accepted_snapshot_path = to_accepted_path(new_snapshot_path)
       use accepted_snapshot <- result.try(read_accepted(accepted_snapshot_path))
 
@@ -694,13 +836,13 @@ fn do_review(
       // We ask the user what to do with this snapshot.
       use choice <- result.try(ask_choice())
       use _ <- result.try(case choice {
-        AcceptSnapshot -> accept_snapshot(new_snapshot_path)
+        AcceptSnapshot -> accept_snapshot(new_snapshot_path, titles)
         RejectSnapshot -> reject_snapshot(new_snapshot_path)
         SkipSnapshot -> Ok(Nil)
       })
 
       // Let's keep going with the remaining snapshots.
-      do_review(rest, current + 1, out_of)
+      do_review(rest, titles, current + 1, out_of)
     }
   }
 }
@@ -752,13 +894,16 @@ fn accept_all() -> Result(Nil, Error) {
   use snapshots_folder <- result.try(find_snapshots_folder())
   use new_snapshots <- result.try(list_new_snapshots(in: snapshots_folder))
 
+  let get_titles = titles.from_test_directory()
+  use titles <- result.try(result.map_error(get_titles, CannotGetTitles))
+
   case list.length(new_snapshots) {
     0 -> io.println("No new snapshots to accept.")
     1 -> io.println("Accepting one new snapshot.")
     n -> io.println("Accepting " <> int.to_string(n) <> " new snapshots.")
   }
 
-  list.try_each(new_snapshots, accept_snapshot)
+  list.try_each(new_snapshots, accept_snapshot(_, titles))
 }
 
 fn reject_all() -> Result(Nil, Error) {

@@ -1,6 +1,8 @@
 ---
-version: 1.0.3
+version: 1.0.4
 title: diffing a case expression
+file: ./test/birdie_test.gleam
+test_name: complex_function_test
 ---
 case foo(bar, baz) {
   True ->

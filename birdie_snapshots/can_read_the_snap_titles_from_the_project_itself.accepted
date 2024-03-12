@@ -1,0 +1,18 @@
+---
+version: 1.0.4
+title: can read the snap titles from the project itself
+file: ./test/titles_test.gleam
+test_name: can_read_the_snap_titles_from_the_project_itself_test
+---
+--- LITERALS ---
+can find literal titles when calling `birdie.snap` [can_find_literal_titles_when_calling_birdie_snap_test - ./test/titles_test.gleam]
+can find literal titles when calling `snap` [can_find_literal_titles_when_calling_snap_test - ./test/titles_test.gleam]
+can find literal titles when calling aliased `b.snap` [can_find_literal_titles_when_calling_aliased_birdie_snap_test - ./test/titles_test.gleam]
+can find literal titles when calling aliased `s` [can_find_literal_titles_when_calling_aliased_snap_test - ./test/titles_test.gleam]
+can read the snap titles from the project itself [can_read_the_snap_titles_from_the_project_itself_test - ./test/titles_test.gleam]
+diffing a case expression                [complex_function_test - ./test/birdie_test.gleam]
+my favourite number wrapped in a result  [a_result_test - ./test/birdie_test.gleam]
+my first snapshot                        [hello_birdie_test - ./test/birdie_test.gleam]
+snapping a list of numbers               [list_test - ./test/birdie_test.gleam]
+
+--- PREFIXES ---

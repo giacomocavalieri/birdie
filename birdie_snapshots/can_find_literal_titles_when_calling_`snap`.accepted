@@ -1,0 +1,20 @@
+---
+version: 1.0.4
+title: can find literal titles when calling `snap`
+file: ./test/titles_test.gleam
+test_name: can_find_literal_titles_when_calling_snap_test
+---
+--- LITERALS ---
+with function capture and labels         [in_pipeline_with_piped_title - my/module]
+with function capture and no labels      [in_pipeline_with_piped_title - my/module]
+with function capture and some labels    [in_pipeline_with_piped_title - my/module]
+with just content label                  [direct_call - my/module]
+with just title label                    [direct_call - my/module]
+with label                               [in_pipeline_with_piped_content - my/module]
+with labels                              [direct_call - my/module]
+with no labels                           [direct_call - my/module]
+with swapped labels                      [direct_call - my/module]
+without function capture and labelled content [in_pipeline_with_piped_title - my/module]
+without label                            [in_pipeline_with_piped_content - my/module]
+
+--- PREFIXES ---
