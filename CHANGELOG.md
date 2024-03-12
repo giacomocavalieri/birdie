@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- ✨ Fail the review if there's tests with duplicate titles
+
 ## v1.0.4 - 2024-02-01
 
 - ➖ Drop the `glam` dependency
