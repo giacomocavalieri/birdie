@@ -73,6 +73,11 @@ what you're expecting to see when reviewing those.
 Also all snapshots _must_ have unique names so that birdie won't mix those up,
 so be careful when naming snapshots to not repeat the same title twice!
 
+> During the review process, Birdie will try to be helpful and show you an
+> error message if it can spot two tests that happen to share the same exact
+> title. It will only work for snapshots that have a literal string as a title
+> but it can be really helpful to spot some of those confusing bugs!
+
 ### How big should the snapshot's content be?
 
 My recommendation is strive to have small and cohesive snapshots. Each
