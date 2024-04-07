@@ -4,7 +4,6 @@
 packages = [
   { name = "argv", version = "1.0.2", build_tools = ["gleam"], requirements = [], otp_app = "argv", source = "hex", outer_checksum = "BA1FF0929525DEBA1CE67256E5ADF77A7CDDFE729E3E3F57A5BDCAA031DED09D" },
   { name = "filepath", version = "1.0.0", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "filepath", source = "hex", outer_checksum = "EFB6FF65C98B2A16378ABC3EE2B14124168C0CE5201553DE652E2644DCFDB594" },
-  { name = "gap", version = "1.1.3", build_tools = ["gleam"], requirements = ["gleam_community_ansi", "gleam_stdlib"], otp_app = "gap", source = "hex", outer_checksum = "6EF5E3B523FDFBC317E9EA28D5163EE04744A97C007106F90207569789612291" },
   { name = "glance", version = "0.8.2", build_tools = ["gleam"], requirements = ["gleam_stdlib", "glexer"], otp_app = "glance", source = "hex", outer_checksum = "ACF09457E8B564AD7A0D823DAFDD326F58263C01ACB0D432A9BEFDEDD1DA8E73" },
   { name = "gleam_community_ansi", version = "1.4.0", build_tools = ["gleam"], requirements = ["gleam_community_colour", "gleam_stdlib"], otp_app = "gleam_community_ansi", source = "hex", outer_checksum = "FE79E08BF97009729259B6357EC058315B6FBB916FAD1C2FF9355115FEB0D3A4" },
   { name = "gleam_community_colour", version = "1.4.0", build_tools = ["gleam"], requirements = ["gleam_json", "gleam_stdlib"], otp_app = "gleam_community_colour", source = "hex", outer_checksum = "795964217EBEDB3DA656F5EB8F67D7AD22872EB95182042D3E7AFEF32D3FD2FE" },
@@ -23,7 +22,6 @@ packages = [
 [requirements]
 argv = { version = "~> 1.0" }
 filepath = { version = "~> 1.0" }
-gap = { version = "~> 1.1" }
 glance = { version = "~> 0.8" }
 gleam_community_ansi = { version = "~> 1.4" }
 gleam_erlang = { version = "~> 0.24" }

@@ -3,6 +3,7 @@
 ## Unreleased
 
 - ⬆️ Update filepath from `~> 0.1` to `~> 1.0`
+- ➖ Drop `gap` dependency
 
 ## v1.1.0 - 2024-03-12
 
