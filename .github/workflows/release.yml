@@ -13,6 +13,7 @@ jobs:
         with:
           otp-version: "26.0.2"
           gleam-version: "1.0.0"
+          rebar3-version: "3"
 
       - run: cargo install tomlq
       - run: |

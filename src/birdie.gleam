@@ -16,11 +16,9 @@ import justin
 import rank
 import simplifile
 
-const birdie_version = "1.1.0"
+const birdie_version = "1.1.1"
 
 const birdie_snapshots_folder = "birdie_snapshots"
-
-const birdie_test_failed_message = "🐦‍⬛ Birdie snapshot test failed"
 
 const hint_review_message = "run `gleam run -m birdie` to review the snapshots"
 
@@ -92,7 +90,7 @@ pub fn snap(content content: String, title title: String) -> Nil {
       let box = new_snapshot_box(snapshot, [hint])
 
       io.println_error("\n\n" <> box <> "\n")
-      panic as birdie_test_failed_message
+      panic as "🐦‍⬛ Birdie snapshot test failed"
     }
 
     Ok(Different(accepted, new)) -> {
@@ -101,12 +99,12 @@ pub fn snap(content content: String, title title: String) -> Nil {
       let box = diff_snapshot_box(accepted, new, [hint])
 
       io.println_error("\n\n" <> box <> "\n")
-      panic as birdie_test_failed_message
+      panic as "🐦‍⬛ Birdie snapshot test failed"
     }
 
     Error(error) -> {
       explain(error)
-      panic as birdie_test_failed_message
+      panic as "🐦‍⬛ Birdie snapshot test failed"
     }
   }
 }

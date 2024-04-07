@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.1.1 - 2024-04-07
 
 - ⬆️ Update filepath from `~> 0.1` to `~> 1.0`
 - ➖ Drop `gap` dependency
