@@ -12,7 +12,6 @@ import birdie/internal/diff.{type DiffLine, DiffLine}
 import birdie/internal/project
 import birdie/internal/titles
 import filepath
-import gleeunit/should
 import justin
 import rank
 import simplifile
@@ -93,8 +92,7 @@ pub fn snap(content content: String, title title: String) -> Nil {
       let box = new_snapshot_box(snapshot, [hint])
 
       io.println_error("\n\n" <> box <> "\n")
-      io.println(birdie_test_failed_message)
-      should.fail()
+      panic as birdie_test_failed_message
     }
 
     Ok(Different(accepted, new)) -> {
@@ -103,14 +101,12 @@ pub fn snap(content content: String, title title: String) -> Nil {
       let box = diff_snapshot_box(accepted, new, [hint])
 
       io.println_error("\n\n" <> box <> "\n")
-      io.println(birdie_test_failed_message)
-      should.fail()
+      panic as birdie_test_failed_message
     }
 
     Error(error) -> {
       explain(error)
-      io.println(birdie_test_failed_message)
-      should.fail()
+      panic as birdie_test_failed_message
     }
   }
 }
@@ -234,10 +230,10 @@ fn serialise(snapshot: Snapshot(New)) -> String {
       "---",
       "version: " <> birdie_version,
       // We escape the newlines in the title so that it fits on one line and it's
-      // easier to parse.
-      // Is this the best course of action? Probably not.
-      // Does this make my life a lot easier? Absolutely! 😁
-      "title: " <> string.replace(title, each: "\n", with: "\\n"),
+        // easier to parse.
+        // Is this the best course of action? Probably not.
+        // Does this make my life a lot easier? Absolutely! 😁
+        "title: " <> string.replace(title, each: "\n", with: "\\n"),
     ],
     info_lines,
     ["---", content],
@@ -574,15 +570,15 @@ fn diff_snapshot_box(
     "mismatched snapshots",
     to_diff_lines(accepted, new),
     [
-      snapshot_default_lines(accepted),
-      additional_info_lines,
-      [
-        InfoLineWithNoTitle("", DoNotSplit),
-        InfoLineWithNoTitle(ansi.red("- old snapshot"), DoNotSplit),
-        InfoLineWithNoTitle(ansi.green("+ new snapshot"), DoNotSplit),
-      ],
-    ]
-    |> list.concat,
+        snapshot_default_lines(accepted),
+        additional_info_lines,
+        [
+          InfoLineWithNoTitle("", DoNotSplit),
+          InfoLineWithNoTitle(ansi.red("- old snapshot"), DoNotSplit),
+          InfoLineWithNoTitle(ansi.green("+ new snapshot"), DoNotSplit),
+        ],
+      ]
+      |> list.concat,
   )
 }
 
@@ -629,10 +625,8 @@ fn pretty_info_line(line: InfoLine, width: Int) -> String {
   let #(prefix, prefix_length) = case line {
     InfoLineWithNoTitle(..) -> #("  ", 2)
     InfoLineWithTitle(title: title, ..) -> #(
-      "  "
-      <> ansi.blue(title <> ": "),
-      string.length(title)
-      + 4,
+      "  " <> ansi.blue(title <> ": "),
+      string.length(title) + 4,
     )
   }
 
@@ -656,17 +650,17 @@ fn pretty_diff_line(diff_line: DiffLine, padding: Int) -> String {
   let #(pretty_number, pretty_line, separator) = case kind {
     diff.Shared -> #(
       int.to_string(number)
-      |> string.pad_left(to: padding - 1, with: " ")
-      |> ansi.dim,
+        |> string.pad_left(to: padding - 1, with: " ")
+        |> ansi.dim,
       ansi.dim(line),
       " │ ",
     )
 
     diff.New -> #(
       int.to_string(number)
-      |> string.pad_left(to: padding - 1, with: " ")
-      |> ansi.green
-      |> ansi.bold,
+        |> string.pad_left(to: padding - 1, with: " ")
+        |> ansi.green
+        |> ansi.bold,
       ansi.green(line),
       ansi.green(" + "),
     )
@@ -862,14 +856,14 @@ type ReviewChoice {
 fn ask_choice() -> Result(ReviewChoice, Error) {
   io.println(
     ansi.bold(ansi.green("  a"))
-      <> " accept  "
-      <> ansi.dim("accept the new snapshot\n")
-      <> ansi.bold(ansi.red("  r"))
-      <> " reject  "
-      <> ansi.dim("reject the new snapshot\n")
-      <> ansi.bold(ansi.yellow("  s"))
-      <> " skip    "
-      <> ansi.dim("skip the snapshot for now\n"),
+    <> " accept  "
+    <> ansi.dim("accept the new snapshot\n")
+    <> ansi.bold(ansi.red("  r"))
+    <> " reject  "
+    <> ansi.dim("reject the new snapshot\n")
+    <> ansi.bold(ansi.yellow("  s"))
+    <> " skip    "
+    <> ansi.dim("skip the snapshot for now\n"),
   )
   // We clear the line of any possible garbage that might still be there from
   // a previous prompt of the same method.

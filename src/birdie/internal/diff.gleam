@@ -53,7 +53,8 @@ fn match_diff_lines(
 
     // While the second list has lines that are not in common we add those
     // marking them as new.
-    [first_common, ..], one, [first_other, ..other] if first_common != first_other ->
+    [first_common, ..], one, [first_other, ..other] if first_common
+      != first_other ->
       [DiffLine(line_other, first_other, New), ..lines]
       |> match_diff_lines(lcs, line_one, one, line_other + 1, other)
 

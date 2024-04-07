@@ -26,7 +26,7 @@ glance = { version = "~> 0.8" }
 gleam_community_ansi = { version = "~> 1.4" }
 gleam_erlang = { version = "~> 0.24" }
 gleam_stdlib = { version = "~> 0.34 or ~> 1.0" }
-gleeunit = { version = "~> 1.0" }
+gleeunit = { version = "~> 1.1"}
 justin = { version = "~> 1.0" }
 rank = { version = "~> 1.0" }
 simplifile = { version = "~> 1.2" }
