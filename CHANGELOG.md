@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- ⬆️ Update filepath from `~> 0.1` to `~> 1.0`
+
 ## v1.1.0 - 2024-03-12
 
 - ✨ Fail the review if there's tests with duplicate titles
