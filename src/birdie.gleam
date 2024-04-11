@@ -23,6 +23,8 @@ const birdie_snapshots_folder = "birdie_snapshots"
 const hint_review_message = "run `gleam run -m birdie` to review the snapshots"
 
 type Error {
+  SnapshotWithEmptyTitle
+
   CannotCreateSnapshotsFolder(reason: simplifile.FileError)
 
   CannotReadAcceptedSnapshot(reason: simplifile.FileError, source: String)
@@ -90,7 +92,7 @@ pub fn snap(content content: String, title title: String) -> Nil {
       let box = new_snapshot_box(snapshot, [hint])
 
       io.println_error("\n\n" <> box <> "\n")
-      panic as "🐦‍⬛ Birdie snapshot test failed"
+      panic as "Birdie snapshot test failed"
     }
 
     Ok(Different(accepted, new)) -> {
@@ -99,12 +101,12 @@ pub fn snap(content content: String, title title: String) -> Nil {
       let box = diff_snapshot_box(accepted, new, [hint])
 
       io.println_error("\n\n" <> box <> "\n")
-      panic as "🐦‍⬛ Birdie snapshot test failed"
+      panic as "Birdie snapshot test failed"
     }
 
     Error(error) -> {
-      explain(error)
-      panic as "🐦‍⬛ Birdie snapshot test failed"
+      let panic_message = "Birdie snapshot test failed\n" <> explain(error)
+      panic as panic_message
     }
   }
 }
@@ -116,6 +118,8 @@ type Outcome {
 }
 
 fn do_snap(content: String, title: String) -> Result(Outcome, Error) {
+  use _ <- result.try(validate_snapshot_title(title))
+
   // We have to find the snapshot folder since the `gleam test` command might
   // be run from any subfolder we can't just assume we're in the project's root.
   use folder <- result.try(find_snapshots_folder())
@@ -155,6 +159,13 @@ fn do_snap(content: String, title: String) -> Result(Outcome, Error) {
       use _ <- result.try(save(new, to: new_snapshot_path))
       Ok(Different(accepted, new))
     }
+  }
+}
+
+fn validate_snapshot_title(title: String) -> Result(Nil, Error) {
+  case string.trim(title) {
+    "" -> Error(SnapshotWithEmptyTitle)
+    _ -> Ok(Nil)
   }
 }
 
@@ -396,9 +407,12 @@ fn to_accepted_path(file: String) -> String {
 
 // --- PRETTY PRINTING ---------------------------------------------------------
 
-fn explain(error: Error) -> Nil {
+fn explain(error: Error) -> String {
   let heading = fn(reason) { "[" <> ansi.bold(string.inspect(reason)) <> "] " }
   let message = case error {
+    SnapshotWithEmptyTitle ->
+      "A snapshot cannot have the empty string as a title."
+
     CannotCreateSnapshotsFolder(reason: reason) ->
       heading(reason) <> "I couldn't create the snapshots folder."
 
@@ -505,7 +519,7 @@ when reviewing them, try changing one of those.
       panic as "Prefixes are not implemented yet"
   }
 
-  io.println_error("❌ " <> message)
+  message
 }
 
 fn to_function_name(file: String, function_name: String) -> String {
@@ -950,7 +964,7 @@ fn more_than_one_command(subcommands: List(String)) -> Nil {
 fn report_status(result: Result(Nil, Error)) -> Nil {
   case result {
     Ok(Nil) -> io.println(ansi.green("🐦‍⬛ Done!"))
-    Error(error) -> explain(error)
+    Error(error) -> io.println_error("❌ " <> explain(error))
   }
 }
 
