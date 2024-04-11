@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- 🐛 Make sure no snapshot with an empty title is accepted
+
 ## v1.1.1 - 2024-04-07
 
 - ⬆️ Update filepath from `~> 0.1` to `~> 1.0`
