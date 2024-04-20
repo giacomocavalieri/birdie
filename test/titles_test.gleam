@@ -1,9 +1,9 @@
+import birdie
+import birdie/internal/titles
+import glance
 import gleam/dict
 import gleam/list
 import gleam/string
-import glance
-import birdie
-import birdie/internal/titles
 import gleeunit/should
 
 const module = "
@@ -139,6 +139,32 @@ pub fn can_find_literal_titles_when_calling_aliased_snap_test() {
   |> assert_titles
   |> pretty_titles
   |> birdie.snap(title: "can find literal titles when calling aliased `s`")
+}
+
+pub fn can_find_literal_titles_when_calling_discarded_module_test() {
+  module
+  |> string.replace(
+    each: "{{birdie_import}}",
+    with: "import birdie.{snap} as _",
+  )
+  |> string.replace(each: "{{snap_invocation}}", with: "snap")
+  |> assert_titles
+  |> pretty_titles
+  |> birdie.snap(title: "can find literal titles when calling discarded module")
+}
+
+pub fn can_find_literal_titles_when_calling_aliased_discarded_module_test() {
+  module
+  |> string.replace(
+    each: "{{birdie_import}}",
+    with: "import birdie.{snap as s} as _",
+  )
+  |> string.replace(each: "{{snap_invocation}}", with: "s")
+  |> assert_titles
+  |> pretty_titles
+  |> birdie.snap(
+    title: "can find literal titles when calling aliased discarded module",
+  )
 }
 
 // pub fn can_find_prefix_titles_when_calling_birdie_snap_test() {

@@ -1,14 +1,14 @@
+import birdie/internal/project
+import filepath
+import glance
 import gleam/bool
 import gleam/dict.{type Dict}
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/result
 import gleam/string
-import filepath
-import glance
 import simplifile
 import trie.{type Trie}
-import birdie/internal/project
 
 /// A data structure to hold info about all the titles gathered from a project's
 /// test modules.
@@ -63,6 +63,7 @@ pub type Error {
 type BirdieImport {
   Unqualified(module_alias: String)
   Qualified(module_alias: String, snap_alias: String)
+  Discarded(snap_alias: String)
 }
 
 type SnapTitle {
@@ -194,10 +195,24 @@ fn birdie_import(module: glance.Module) -> Result(BirdieImport, Nil) {
       unqualified_types: _,
       unqualified_values: unqualified_values,
     ) -> {
-      let module_name = option.unwrap(birdie_alias, or: "birdie")
-      case imported_snap(unqualified_values) {
-        Ok(snap_alias) -> list.Stop(Ok(Qualified(module_name, snap_alias)))
-        Error(_) -> list.Stop(Ok(Unqualified(module_name)))
+      case birdie_alias {
+        Some(glance.Discarded(_)) ->
+          case imported_snap(unqualified_values) {
+            Ok(snap_alias) -> list.Stop(Ok(Discarded(snap_alias)))
+            Error(_) -> list.Stop(Error(Nil))
+          }
+
+        Some(glance.Named(module_name)) ->
+          case imported_snap(unqualified_values) {
+            Ok(snap_alias) -> list.Stop(Ok(Qualified(module_name, snap_alias)))
+            Error(_) -> list.Stop(Ok(Unqualified(module_name)))
+          }
+
+        None ->
+          case imported_snap(unqualified_values) {
+            Ok(snap_alias) -> list.Stop(Ok(Qualified("birdie", snap_alias)))
+            Error(_) -> list.Stop(Ok(Unqualified("birdie")))
+          }
       }
     }
     _ -> list.Continue(nil)
@@ -230,67 +245,70 @@ fn snap_call(
       ],
     )
     | glance.Call(
-      function: function,
-      arguments: [glance.Field(None, _snapshot_content), glance.Field(_, title)],
-    )
+        function: function,
+        arguments: [
+          glance.Field(None, _snapshot_content),
+          glance.Field(_, title),
+        ],
+      )
     | glance.Call(
-      function: function,
-      arguments: [
-        glance.Field(Some("content"), _snapshot_content),
-        glance.Field(_, title),
-      ],
-    )
+        function: function,
+        arguments: [
+          glance.Field(Some("content"), _snapshot_content),
+          glance.Field(_, title),
+        ],
+      )
     | // A direct function call to the `birdie.snap` function where the first
-    // argument is the labelled title.
-    glance.Call(
-      function: function,
-      arguments: [glance.Field(Some("title"), title), glance.Field(_, _)],
-    )
-    | // A call to the `birdie.snap` function where the title is piped into it
-    // and the content is passed as a labelled argument.
-    glance.BinaryOperator(
-      name: glance.Pipe,
-      left: title,
-      right: glance.Call(
+      // argument is the labelled title.
+      glance.Call(
         function: function,
-        arguments: [glance.Field(Some("content"), _snapshot_content)],
-      ),
-    )
+        arguments: [glance.Field(Some("title"), title), glance.Field(_, _)],
+      )
+    | // A call to the `birdie.snap` function where the title is piped into it
+      // and the content is passed as a labelled argument.
+      glance.BinaryOperator(
+        name: glance.Pipe,
+        left: title,
+        right: glance.Call(
+          function: function,
+          arguments: [glance.Field(Some("content"), _snapshot_content)],
+        ),
+      )
     | // A call to the `birdie.snap` function where the content is piped into
-    // it and the title is passed as an argument - labelled or not.
-    glance.BinaryOperator(
-      name: glance.Pipe,
-      left: _snapshot_content,
-      right: glance.Call(
-        function: function,
-        arguments: [glance.Field(_, title)],
-      ),
-    )
+      // it and the title is passed as an argument - labelled or not.
+      glance.BinaryOperator(
+        name: glance.Pipe,
+        left: _snapshot_content,
+        right: glance.Call(
+          function: function,
+          arguments: [glance.Field(_, title)],
+        ),
+      )
     | // We pipe into `title: _`, since we're using a label we don't have to
-    // check the position.
-    glance.BinaryOperator(
-      name: glance.Pipe,
-      left: title,
-      right: glance.FnCapture(
-        function: function,
-        label: Some("title"),
-        arguments_before: _,
-        arguments_after: _,
-      ),
-    )
+      // check the position.
+      glance.BinaryOperator(
+        name: glance.Pipe,
+        left: title,
+        right: glance.FnCapture(
+          function: function,
+          label: Some("title"),
+          arguments_before: _,
+          arguments_after: _,
+        ),
+      )
     | // A call to the `birdie.snap` function where the title is piped into it
-    // and the content is passed as an argument. This must be done using a
-    // function capture.
-    glance.BinaryOperator(
-      name: glance.Pipe,
-      left: title,
-      right: glance.FnCapture(
-        function: function,
-        label: _,
-        arguments_before: [glance.Field(None, _snapshot_content)],
-        arguments_after: [],
-      ),
-    ) -> {
+      // and the content is passed as an argument. This must be done using a
+      // function capture.
+      glance.BinaryOperator(
+        name: glance.Pipe,
+        left: title,
+        right: glance.FnCapture(
+          function: function,
+          label: _,
+          arguments_before: [glance.Field(None, _snapshot_content)],
+          arguments_after: [],
+        ),
+      ) -> {
       let is_snap_function = is_snap_function(function, birdie_import)
       use <- bool.guard(when: !is_snap_function, return: Error(Nil))
       expression_to_snap_title(title)
@@ -304,14 +322,16 @@ fn is_snap_function(
   expression: glance.Expression,
   birdie_import: BirdieImport,
 ) -> Bool {
-  let is_a_call_to_snap = fn(module, name) -> Bool {
+  let is_a_call_to_snap = fn(module, name) {
     case module, birdie_import {
       None, Unqualified(module_alias: _) -> False
       None, Qualified(module_alias: _, snap_alias: snap) -> snap == name
+      None, Discarded(snap_alias: snap) -> snap == name
       Some(module), Qualified(module_alias: birdie, snap_alias: snap) ->
         module <> "." <> name == birdie <> "." <> snap
       Some(module), Unqualified(module_alias: birdie) ->
         module <> "." <> name == birdie <> ".snap"
+      Some(_), Discarded(snap_alias: _) -> False
     }
   }
 

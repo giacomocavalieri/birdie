@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- ⬆️ Update glance dependency
+
 ## v1.1.2 - 2024-04-11
 
 - 🐛 Make sure no snapshot with an empty title is accepted

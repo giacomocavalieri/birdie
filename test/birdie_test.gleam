@@ -1,6 +1,6 @@
+import birdie
 import gleam/string
 import gleeunit
-import birdie
 
 pub fn main() {
   gleeunit.main()
