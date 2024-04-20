@@ -1,3 +1,8 @@
+import argv
+import birdie/internal/diff.{type DiffLine, DiffLine}
+import birdie/internal/project
+import birdie/internal/titles
+import filepath
 import gleam/bool
 import gleam/erlang
 import gleam/int
@@ -7,11 +12,6 @@ import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
 import gleam_community/ansi
-import argv
-import birdie/internal/diff.{type DiffLine, DiffLine}
-import birdie/internal/project
-import birdie/internal/titles
-import filepath
 import justin
 import rank
 import simplifile
@@ -239,10 +239,10 @@ fn serialise(snapshot: Snapshot(New)) -> String {
       "---",
       "version: " <> birdie_version,
       // We escape the newlines in the title so that it fits on one line and it's
-        // easier to parse.
-        // Is this the best course of action? Probably not.
-        // Does this make my life a lot easier? Absolutely! 😁
-        "title: " <> string.replace(title, each: "\n", with: "\\n"),
+      // easier to parse.
+      // Is this the best course of action? Probably not.
+      // Does this make my life a lot easier? Absolutely! 😁
+      "title: " <> string.replace(title, each: "\n", with: "\\n"),
     ],
     info_lines,
     ["---", content],
@@ -582,14 +582,14 @@ fn diff_snapshot_box(
     "mismatched snapshots",
     to_diff_lines(accepted, new),
     [
-        snapshot_default_lines(accepted),
-        additional_info_lines,
-        [
-          InfoLineWithNoTitle("", DoNotSplit),
-          InfoLineWithNoTitle(ansi.red("- old snapshot"), DoNotSplit),
-          InfoLineWithNoTitle(ansi.green("+ new snapshot"), DoNotSplit),
-        ],
-      ]
+      snapshot_default_lines(accepted),
+      additional_info_lines,
+      [
+        InfoLineWithNoTitle("", DoNotSplit),
+        InfoLineWithNoTitle(ansi.red("- old snapshot"), DoNotSplit),
+        InfoLineWithNoTitle(ansi.green("+ new snapshot"), DoNotSplit),
+      ],
+    ]
       |> list.concat,
   )
 }
