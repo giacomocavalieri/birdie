@@ -130,13 +130,12 @@ pub fn from_test_directory() -> Result(Titles, Error) {
   use files <- try(get_files, CannotReadTestDirectory)
 
   use titles, file <- list.try_fold(over: files, from: new())
+  let is_gleam_file = filepath.extension(file) == Ok("gleam")
+  use <- bool.guard(when: !is_gleam_file, return: Ok(titles))
+
   use raw_module <- try(simplifile.read(file), CannotReadTestFile(_, file))
-
-  let parse_module =
-    glance.module(raw_module)
-    |> result.replace_error(TestModuleIsNotCompiling(file))
-  use module <- result.try(parse_module)
-
+  let compile_module = glance.module(raw_module)
+  use module <- try_replace(compile_module, TestModuleIsNotCompiling(file))
   from_module(titles, file, module)
 }
 
@@ -507,5 +506,16 @@ fn try(
   case result {
     Ok(a) -> fun(a)
     Error(e) -> Error(map_error(e))
+  }
+}
+
+fn try_replace(
+  result: Result(a, b),
+  replace_error: c,
+  fun: fn(a) -> Result(d, c),
+) -> Result(d, c) {
+  case result {
+    Ok(a) -> fun(a)
+    Error(_) -> Error(replace_error)
   }
 }

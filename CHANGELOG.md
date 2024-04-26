@@ -3,6 +3,7 @@
 ## Unreleased
 
 - ⬆️ Update glance dependency
+- 🐛 Ignore non Gleam files in the test directory
 
 ## v1.1.2 - 2024-04-11
 
