@@ -1,9 +1,12 @@
 # Changelog
 
-## Unreleased
+## v1.1.4 - 2024-04-26
+
+- 🐛 Ignore non Gleam files in the test directory
+
+## v1.1.3 - 2024-04-20
 
 - ⬆️ Update glance dependency
-- 🐛 Ignore non Gleam files in the test directory
 
 ## v1.1.2 - 2024-04-11
 
