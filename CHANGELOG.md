@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.1.5 - 2024-05-10
 
 - 🧑🏻‍💻 No longer fail the process review if Glance cannot parse a test module.
   Instead title data will simply be omitted.
