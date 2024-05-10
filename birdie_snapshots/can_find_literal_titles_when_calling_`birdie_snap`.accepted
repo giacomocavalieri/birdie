@@ -1,5 +1,5 @@
 ---
-version: 1.1.4
+version: 1.1.5
 title: can find literal titles when calling `birdie.snap`
 file: ./test/titles_test.gleam
 test_name: can_find_literal_titles_when_calling_birdie_snap_test
