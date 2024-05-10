@@ -42,10 +42,8 @@ pub type Match {
 ///
 pub type Error {
   CannotFindProjectRoot(reason: simplifile.FileError)
-  TestModuleIsNotCompiling(file: String)
   CannotReadTestDirectory(reason: simplifile.FileError)
   CannotReadTestFile(reason: simplifile.FileError, file: String)
-  ParseError(reason: glance.Error)
   DuplicateLiteralTitles(title: String, one: TestInfo, other: TestInfo)
   OverlappingPrefixes(
     prefix: String,
@@ -134,9 +132,10 @@ pub fn from_test_directory() -> Result(Titles, Error) {
   use <- bool.guard(when: !is_gleam_file, return: Ok(titles))
 
   use raw_module <- try(simplifile.read(file), CannotReadTestFile(_, file))
-  let compile_module = glance.module(raw_module)
-  use module <- try_replace(compile_module, TestModuleIsNotCompiling(file))
-  from_module(titles, file, module)
+  case glance.module(raw_module) {
+    Ok(module) -> from_module(titles, file, module)
+    Error(_) -> Ok(titles)
+  }
 }
 
 pub fn from_module(
@@ -506,16 +505,5 @@ fn try(
   case result {
     Ok(a) -> fun(a)
     Error(e) -> Error(map_error(e))
-  }
-}
-
-fn try_replace(
-  result: Result(a, b),
-  replace_error: c,
-  fun: fn(a) -> Result(d, c),
-) -> Result(d, c) {
-  case result {
-    Ok(a) -> fun(a)
-    Error(_) -> Error(replace_error)
   }
 }
