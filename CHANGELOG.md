@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- 🧑🏻‍💻 No longer fail the process review if Glance cannot parse a test module.
+  Instead title data will simply be omitted.
+
 ## v1.1.4 - 2024-04-26
 
 - 🐛 Ignore non Gleam files in the test directory
