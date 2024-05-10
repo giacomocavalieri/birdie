@@ -465,12 +465,6 @@ fn explain(error: Error) -> String {
       <> "I couldn't locate the project's root where the snapshot's"
       <> " folder should be."
 
-    CannotGetTitles(titles.TestModuleIsNotCompiling(file: file)) ->
-      "The test file "
-      <> ansi.italic("\"" <> file <> "\"\n")
-      <> " is not compiling.\n"
-      <> "All your test should be compiling for Birdie to work!"
-
     CannotGetTitles(titles.CannotReadTestDirectory(reason: reason)) ->
       heading(reason) <> "I couldn't list the contents of the test folder."
 
@@ -478,12 +472,6 @@ fn explain(error: Error) -> String {
       heading(reason)
       <> "I couldn't read the test file "
       <> ansi.italic("\"" <> file <> "\"\n")
-
-    CannotGetTitles(titles.ParseError(reason: _reason)) ->
-      "I couldn't parse the content of your test modules.\n"
-      <> "This most likely is a bug in Birdie, it would be grand if you could"
-      <> "open an issue on GitHub:\n"
-      <> "\"https://github.com/giacomocavalieri/birdie/issues\""
 
     CannotGetTitles(titles.DuplicateLiteralTitles(
       title: title,
