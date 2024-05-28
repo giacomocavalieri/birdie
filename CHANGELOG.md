@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.1.6 - 2024-05-28
+
+- ⬆️ Change dependencies contraints
+
 ## v1.1.5 - 2024-05-10
 
 - 🧑🏻‍💻 No longer fail the process review if Glance cannot parse a test module.
