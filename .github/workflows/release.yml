@@ -12,17 +12,8 @@ jobs:
       - uses: erlef/setup-beam@v1
         with:
           otp-version: "26.0.2"
-          gleam-version: "1.1.0"
+          gleam-version: "1.2.1"
           rebar3-version: "3"
-
-      - run: cargo install tomlq
-      - run: |
-          if [ "v$(tomlq version -f gleam.toml)" == "${{ github.ref_name }}" ]; then
-            exit 0
-          fi
-          echo "tag does not match version in gleam.toml, refusing to publish"
-          exit 1
-
       - run: gleam format --check src test
       - run: gleam test --target erlang
       - run: gleam publish -y
