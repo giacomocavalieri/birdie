@@ -53,8 +53,9 @@ fn match_diff_lines(
 
     // While the second list has lines that are not in common we add those
     // marking them as new.
-    [first_common, ..], one, [first_other, ..other] if first_common
-      != first_other ->
+    [first_common, ..], one, [first_other, ..other]
+      if first_common != first_other
+    ->
       [DiffLine(line_other, first_other, New), ..lines]
       |> match_diff_lines(lcs, line_one, one, line_other + 1, other)
 
@@ -176,8 +177,8 @@ fn sum_occurrences(one: Occurs(a), other: Occurs(a)) -> Occurs(a) {
     Other(n, _, _), Other(m, before, after) -> Other(n + m, before, after)
 
     One(n, before_one, after_one), Other(m, before_other, after_other)
-    | Both(n, before_one, after_one, _, _), Other(m, before_other, after_other) ->
-      Both(n + m, before_one, after_one, before_other, after_other)
+    | Both(n, before_one, after_one, _, _), Other(m, before_other, after_other)
+    -> Both(n + m, before_one, after_one, before_other, after_other)
 
     _, _ -> panic as "unreachable: sum_occurrences"
   }
