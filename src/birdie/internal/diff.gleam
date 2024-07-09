@@ -157,7 +157,7 @@ fn histogram_add(
     [] -> histogram
     [first, ..rest] ->
       {
-        use previous <- dict.update(in: histogram, update: first)
+        use previous <- dict.upsert(in: histogram, update: first)
         let new_occurrence = to_occurrence(1, reverse_prefix, rest)
         case previous {
           Some(occurrence) -> sum_occurrences(occurrence, new_occurrence)
