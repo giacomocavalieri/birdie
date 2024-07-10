@@ -25,7 +25,7 @@ filepath = { version = ">= 1.0.0 and < 2.0.0" }
 glance = { version = ">= 0.11.0 and < 1.0.0" }
 gleam_community_ansi = { version = ">= 1.4.0 and < 2.0.0" }
 gleam_erlang = { version = ">= 0.25.0 and < 1.0.0" }
-gleam_stdlib = { version = ">= 0.38.0 and < 1.0.0" }
+gleam_stdlib = { version = ">= 0.39.0 and < 1.0.0" }
 gleeunit = { version = ">= 1.2.0 and < 2.0.0" }
 justin = { version = ">= 1.0.1 and < 2.0.0" }
 rank = { version = ">= 1.0.0 and < 2.0.0" }

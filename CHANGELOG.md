@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.1.8 - 2024-05-28
+
+- ⬆️ Update `stdlib` to `>= 0.39.0 and < 1.0.0`
+
 ## v1.1.7 - 2024-05-28
 
 - ⬆️ Update `simplifile` to `>= 2.0.1 and < 3.0.0`
