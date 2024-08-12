@@ -2,6 +2,7 @@ import argv
 import birdie/internal/diff.{type DiffLine, DiffLine}
 import birdie/internal/project
 import birdie/internal/titles
+import edit_distance/levenshtein
 import filepath
 import gleam/bool
 import gleam/erlang
@@ -730,6 +731,22 @@ fn do_to_lines(
 
 // --- CLI COMMAND -------------------------------------------------------------
 
+type Command {
+  Review
+  AcceptAll
+  RejectAll
+  Help
+}
+
+fn command_to_string(command: Command) -> String {
+  case command {
+    Review -> "review"
+    AcceptAll -> "accept-all"
+    RejectAll -> "reject-all"
+    Help -> "help"
+  }
+}
+
 /// Reviews the snapshots in the project's folder.
 /// This function will behave differently depending on the command line
 /// arguments provided to the program.
@@ -744,14 +761,69 @@ fn do_to_lines(
 /// > and checked with the vcs you're using.
 ///
 pub fn main() -> Nil {
-  case argv.load().arguments {
-    [] | ["review"] -> report_status(review())
-    ["accept-all"] | ["accept", "all"] -> report_status(accept_all())
-    ["reject-all"] | ["reject", "all"] -> report_status(reject_all())
-    ["help"] -> help()
-    [subcommand] -> unexpected_subcommand(subcommand)
-    subcommands -> more_than_one_command(subcommands)
+  let args = argv.load().arguments
+  case parse_command(args) {
+    Ok(command) -> run_command(command)
+    Error(_) ->
+      case args {
+        [subcommand] ->
+          case closest_command(subcommand) {
+            Ok(command) -> suggest_run_command(subcommand, command)
+            Error(Nil) -> unexpected_subcommand(subcommand)
+          }
+        subcommands -> more_than_one_command(subcommands)
+      }
   }
+}
+
+fn parse_command(arguments: List(String)) {
+  case arguments {
+    [] | ["review"] -> Ok(Review)
+    ["accept-all"] | ["accept", "all"] -> Ok(AcceptAll)
+    ["reject-all"] | ["reject", "all"] -> Ok(RejectAll)
+    ["help"] -> Ok(Help)
+    _ -> Error(Nil)
+  }
+}
+
+fn run_command(command: Command) -> Nil {
+  case command {
+    Review -> report_status(review())
+    AcceptAll -> report_status(accept_all())
+    RejectAll -> report_status(reject_all())
+    Help -> help()
+  }
+}
+
+fn suggest_run_command(invalid: String, command: Command) -> Nil {
+  let error_message =
+    ansi.bold("Error: ") <> "\"" <> invalid <> "\" isn't a valid subcommand."
+
+  io.println(ansi.red(error_message))
+  let msg =
+    "I think you misspelled `"
+    <> command_to_string(command)
+    <> "`, would you like me to run it instead? [Y/n] "
+
+  case erlang.get_line(msg) {
+    Error(_) -> Nil
+    Ok(line) ->
+      case string.lowercase(line) |> string.trim {
+        "yes" | "y" | "" -> run_command(command)
+        _ -> io.println("\n" <> help_text())
+      }
+  }
+}
+
+fn closest_command(to string: String) -> Result(Command, Nil) {
+  let distance = fn(c) { command_to_string(c) |> levenshtein.distance(string) }
+
+  [Review, AcceptAll, RejectAll, Help]
+  |> list.map(fn(command) { #(command, distance(command)) })
+  |> list.filter(keeping: fn(command) { command.1 <= 3 })
+  |> list.sort(fn(one, other) { int.compare(one.1, other.1) })
+  |> list.first
+  |> result.map(fn(pair) { pair.0 })
 }
 
 fn review() -> Result(Nil, Error) {

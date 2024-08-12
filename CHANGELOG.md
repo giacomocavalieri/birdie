@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.2.0 - 2024-08-12
+
+- ✨ Birdie can now suggest and run the correct command if it can tell you've
+  made a typo.
+
 ## v1.1.8 - 2024-05-28
 
 - ⬆️ Update `stdlib` to `>= 0.39.0 and < 1.0.0`

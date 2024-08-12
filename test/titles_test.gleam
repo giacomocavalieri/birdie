@@ -81,7 +81,7 @@ fn assert_titles(module: String) -> titles.Titles {
   titles
 }
 
-fn pretty_titles(titles: titles.Titles) -> String {
+fn pretty_titles(ts: titles.Titles) -> String {
   let pretty = fn(title, info) {
     let titles.TestInfo(file: file, test_name: test_name) = info
     let title = string.pad_right(title, to: 40, with: " ")
@@ -90,12 +90,12 @@ fn pretty_titles(titles: titles.Titles) -> String {
   }
 
   let literals =
-    dict.to_list(titles.literals(titles))
+    dict.to_list(titles.literals(ts))
     |> list.map(fn(pair) { pretty(pair.0, pair.1) })
     |> string.join(with: "\n")
 
   let prefixes =
-    dict.to_list(titles.prefixes(titles))
+    dict.to_list(titles.prefixes(ts))
     |> list.map(fn(pair) { pretty(pair.0, pair.1) })
     |> string.join(with: "\n")
 
