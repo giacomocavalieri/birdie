@@ -7,7 +7,7 @@ repository = { type = "github", user = "giacomocavalieri", repo = "birdie" }
 target = "erlang"
 
 [dependencies]
-gleam_stdlib = ">= 0.39.0 and < 1.0.0"
+gleam_stdlib = ">= 0.40.0 and < 1.0.0"
 justin = ">= 1.0.1 and < 2.0.0"
 gleam_community_ansi = ">= 1.4.0 and < 2.0.0"
 argv = ">= 1.0.2 and < 2.0.0"
