@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.2.1 - 2024-08-20
+
+- ⬆️ Update `stdlib` to `>= 0.40.0 and < 1.0.0`
+
 ## v1.2.0 - 2024-08-12
 
 - ✨ Birdie can now suggest and run the correct command if it can tell you've
