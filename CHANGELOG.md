@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- 🐛 Fixed a bug where birdie would strip `\r\n` out of a snapshot content
+
 ## 1.2.2 - 2024-09-06
 
 - 🐛 Fixed a bug where snapshot tests would fail on Windows

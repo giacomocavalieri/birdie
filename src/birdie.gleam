@@ -199,10 +199,11 @@ fn split_n(
 }
 
 fn deserialise(raw: String) -> Result(Snapshot(a), Nil) {
-  let raw = string.replace(each: "\r\n", in: raw, with: "\n")
   case split_n(raw, 4, "\n") {
-    Ok(#(["---", "version: " <> _, "title: " <> title, "---"], content)) ->
-      Ok(Snapshot(title: title, content: content, info: None))
+    Ok(#(["---", "version: " <> _, "title: " <> title, "---"], content))
+    | Ok(#(["---\r", "version: " <> _, "title: " <> title, "---\r"], content)) ->
+      Ok(Snapshot(title: string.trim(title), content: content, info: None))
+
     Ok(_) | Error(_) ->
       case split_n(raw, 6, "\n") {
         Ok(#(
@@ -215,11 +216,25 @@ fn deserialise(raw: String) -> Result(Snapshot(a), Nil) {
             "---",
           ],
           content,
-        )) ->
+        ))
+        | Ok(#(
+            [
+              "---\r",
+              "version: " <> _,
+              "title: " <> title,
+              "file: " <> file,
+              "test_name: " <> test_name,
+              "---\r",
+            ],
+            content,
+          )) ->
           Ok(Snapshot(
-            title: title,
+            title: string.trim(title),
             content: content,
-            info: Some(titles.TestInfo(file: file, test_name: test_name)),
+            info: Some(titles.TestInfo(
+              file: string.trim(file),
+              test_name: string.trim(test_name),
+            )),
           ))
         Ok(_) | Error(_) -> Error(Nil)
       }
