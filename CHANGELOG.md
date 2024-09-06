@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- 🐛 Fixed a bug where snapshot tests would fail on Windows
+
 ## v1.2.1 - 2024-08-20
 
 - ⬆️ Update `stdlib` to `>= 0.40.0 and < 1.0.0`
@@ -7,7 +11,7 @@
 ## v1.2.0 - 2024-08-12
 
 - ✨ Birdie can now suggest and run the correct command if it can tell you've
-  made a typo.
+  made a typo
 
 ## v1.1.8 - 2024-05-28
 

@@ -199,6 +199,7 @@ fn split_n(
 }
 
 fn deserialise(raw: String) -> Result(Snapshot(a), Nil) {
+  let raw = string.replace(each: "\r\n", in: raw, with: "\n")
   case split_n(raw, 4, "\n") {
     Ok(#(["---", "version: " <> _, "title: " <> title, "---"], content)) ->
       Ok(Snapshot(title: title, content: content, info: None))
