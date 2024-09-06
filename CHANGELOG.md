@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.2 - 2024-09-06
 
 - 🐛 Fixed a bug where snapshot tests would fail on Windows
 
