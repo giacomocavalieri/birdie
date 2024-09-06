@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.3 - 2024-09-06
 
 - 🐛 Fixed a bug where birdie would strip `\r\n` out of a snapshot content
 
