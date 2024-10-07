@@ -382,7 +382,7 @@ fn accept_snapshot(
     Error(_) ->
       // Birdie couldn't find any additional info about the given test, so
       // we can just move the `new` snapshot to the `accepted` one.
-      simplifile.rename_file(new_snapshot_path, accepted_snapshot_path)
+      simplifile.rename(new_snapshot_path, accepted_snapshot_path)
       |> result.map_error(CannotAcceptSnapshot(_, new_snapshot_path))
   }
 }
