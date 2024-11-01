@@ -89,12 +89,12 @@ fn lcs(one: List(a), other: List(a)) -> List(a) {
   // 💡 A possible optimisation could be using a cache and hit that before
   // calling this function. That might make things faster as well.
   case lowest_occurrence_common_item(one, other) {
-    None -> list.concat([prefix, suffix])
+    None -> list.flatten([prefix, suffix])
     Some(#(item, _, before_a, after_a, before_b, after_b)) ->
       // 💡 A possible optimisation I want to look into is using bags (super
       // fast append only) and turn that into a list only after everything is
       // done. That way we could avoid always repeatedly appending lists.
-      list.concat([
+      list.flatten([
         prefix,
         lcs(list.reverse(before_a), list.reverse(before_b)),
         [item],
