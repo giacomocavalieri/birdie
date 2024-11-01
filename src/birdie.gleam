@@ -264,7 +264,7 @@ fn serialise(snapshot: Snapshot(New)) -> String {
     info_lines,
     ["---", content],
   ]
-  |> list.concat
+  |> list.flatten
   |> string.join(with: "\n")
 }
 
@@ -574,7 +574,7 @@ fn new_snapshot_box(
   pretty_box(
     "new snapshot",
     content,
-    list.concat([snapshot_default_lines(snapshot), additional_info_lines]),
+    list.flatten([snapshot_default_lines(snapshot), additional_info_lines]),
   )
 }
 
@@ -595,7 +595,7 @@ fn diff_snapshot_box(
         InfoLineWithNoTitle(ansi.green("+ new snapshot"), DoNotSplit),
       ],
     ]
-      |> list.concat,
+      |> list.flatten,
   )
 }
 
