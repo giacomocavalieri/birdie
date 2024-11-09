@@ -137,7 +137,7 @@ fn do_snap(content: String, title: String) -> Result(Outcome, Error) {
   // 💡 TODO: I could investigate using a shared cache or something but it
   //          sounds like a pain to implement and should have to work for both
   //          targets.
-  let new = Snapshot(title: title, content: content, info: None)
+  let new = Snapshot(title:, content:, info: None)
   let new_snapshot_path = new_destination(new, folder)
   let accepted_snapshot_path = to_accepted_path(new_snapshot_path)
 
@@ -202,7 +202,7 @@ fn deserialise(raw: String) -> Result(Snapshot(a), Nil) {
   case split_n(raw, 4, "\n") {
     Ok(#(["---", "version: " <> _, "title: " <> title, "---"], content))
     | Ok(#(["---\r", "version: " <> _, "title: " <> title, "---\r"], content)) ->
-      Ok(Snapshot(title: string.trim(title), content: content, info: None))
+      Ok(Snapshot(title: string.trim(title), content:, info: None))
 
     Ok(_) | Error(_) ->
       case split_n(raw, 6, "\n") {
@@ -230,7 +230,7 @@ fn deserialise(raw: String) -> Result(Snapshot(a), Nil) {
           )) ->
           Ok(Snapshot(
             title: string.trim(title),
-            content: content,
+            content:,
             info: Some(titles.TestInfo(
               file: string.trim(file),
               test_name: string.trim(test_name),
@@ -242,10 +242,10 @@ fn deserialise(raw: String) -> Result(Snapshot(a), Nil) {
 }
 
 fn serialise(snapshot: Snapshot(New)) -> String {
-  let Snapshot(title: title, content: content, info: info) = snapshot
+  let Snapshot(title:, content:, info:) = snapshot
   let info_lines = case info {
     None -> []
-    Some(titles.TestInfo(file: file, test_name: test_name)) -> [
+    Some(titles.TestInfo(file:, test_name:)) -> [
       "file: " <> file,
       "test_name: " <> test_name,
     ]
@@ -285,7 +285,7 @@ fn save(snapshot: Snapshot(New), to destination: String) -> Result(Nil, Error) {
       |> result.map_error(CannotSaveNewSnapshot(
         reason: _,
         title: snapshot.title,
-        destination: destination,
+        destination:,
       ))
   }
 }
@@ -301,8 +301,7 @@ fn read_accepted(source: String) -> Result(Option(Snapshot(Accepted)), Error) {
       }
 
     Error(simplifile.Enoent) -> Ok(None)
-    Error(reason) ->
-      Error(CannotReadAcceptedSnapshot(reason: reason, source: source))
+    Error(reason) -> Error(CannotReadAcceptedSnapshot(reason:, source:))
   }
 }
 
@@ -317,8 +316,7 @@ fn read_new(source: String) -> Result(Snapshot(New), Error) {
   case simplifile.read(source) {
     Ok(content) ->
       result.replace_error(deserialise(content), CorruptedSnapshot(source))
-    Error(reason) ->
-      Error(CannotReadNewSnapshot(reason: reason, source: source))
+    Error(reason) -> Error(CannotReadNewSnapshot(reason:, source:))
   }
 }
 
@@ -327,7 +325,7 @@ fn read_new(source: String) -> Result(Snapshot(New), Error) {
 ///
 fn list_new_snapshots(in folder: String) -> Result(List(String), Error) {
   case simplifile.read_directory(folder) {
-    Error(reason) -> Error(CannotReadSnapshots(reason: reason, folder: folder))
+    Error(reason) -> Error(CannotReadSnapshots(reason:, folder:))
     Ok(files) ->
       Ok({
         use file <- list.filter_map(files)
@@ -360,7 +358,7 @@ fn accept_snapshot(
   titles: titles.Titles,
 ) -> Result(Nil, Error) {
   use snapshot <- result.try(read_new(new_snapshot_path))
-  let Snapshot(title: title, content: content, info: _) = snapshot
+  let Snapshot(title:, content:, info: _) = snapshot
   let accepted_snapshot_path = to_accepted_path(new_snapshot_path)
 
   case titles.find(titles, title) {
@@ -373,7 +371,7 @@ fn accept_snapshot(
         |> result.map_error(CannotAcceptSnapshot(_, new_snapshot_path))
       use _ <- result.try(delete_new_snapshot)
 
-      Snapshot(title: title, content: content, info: Some(info))
+      Snapshot(title:, content:, info: Some(info))
       |> serialise
       |> simplifile.write(to: accepted_snapshot_path)
       |> result.map_error(CannotAcceptSnapshot(_, accepted_snapshot_path))
@@ -430,68 +428,64 @@ fn explain(error: Error) -> String {
     SnapshotWithEmptyTitle ->
       "A snapshot cannot have the empty string as a title."
 
-    CannotCreateSnapshotsFolder(reason: reason) ->
+    CannotCreateSnapshotsFolder(reason:) ->
       heading(reason) <> "I couldn't create the snapshots folder."
 
-    CannotReadAcceptedSnapshot(reason: reason, source: source) ->
+    CannotReadAcceptedSnapshot(reason:, source:) ->
       heading(reason)
       <> "I couldn't read the accepted snapshot from "
       <> ansi.italic("\"" <> source <> "\".")
 
-    CannotReadNewSnapshot(reason: reason, source: source) ->
+    CannotReadNewSnapshot(reason:, source:) ->
       heading(reason)
       <> "I couldn't read the new snapshot from "
       <> ansi.italic("\"" <> source <> "\".")
 
-    CannotSaveNewSnapshot(
-      reason: reason,
-      title: title,
-      destination: destination,
-    ) ->
+    CannotSaveNewSnapshot(reason:, title:, destination:) ->
       heading(reason)
       <> "I couldn't save the snapshot "
       <> ansi.italic("\"" <> title <> "\" ")
       <> "to "
       <> ansi.italic("\"" <> destination <> "\".")
 
-    CannotReadSnapshots(reason: reason, folder: _) ->
+    CannotReadSnapshots(reason:, folder: _) ->
       heading(reason) <> "I couldn't read the snapshots folder's contents."
 
-    CannotRejectSnapshot(reason: reason, snapshot: snapshot) ->
+    CannotRejectSnapshot(reason:, snapshot:) ->
       heading(reason)
       <> "I couldn't reject the snapshot "
       <> ansi.italic("\"" <> snapshot <> "\".")
 
-    CannotAcceptSnapshot(reason: reason, snapshot: snapshot) ->
+    CannotAcceptSnapshot(reason:, snapshot:) ->
       heading(reason)
       <> "I couldn't accept the snapshot "
       <> ansi.italic("\"" <> snapshot <> "\".")
 
     CannotReadUserInput -> "I couldn't read the user input."
 
-    CorruptedSnapshot(source: source) ->
+    CorruptedSnapshot(source:) ->
       "It looks like "
       <> ansi.italic("\"" <> source <> "\"\n")
       <> "is not a valid snapshot.\n"
       <> "This might happen when someone modifies its content.\n"
       <> "Try deleting the snapshot and recreating it."
 
-    CannotFindProjectRoot(reason: reason)
-    | CannotGetTitles(titles.CannotFindProjectRoot(reason: reason)) ->
+    CannotFindProjectRoot(reason:)
+    | CannotGetTitles(titles.CannotFindProjectRoot(reason:)) ->
       heading(reason)
       <> "I couldn't locate the project's root where the snapshot's"
       <> " folder should be."
 
-    CannotGetTitles(titles.CannotReadTestDirectory(reason: reason)) ->
+    CannotGetTitles(titles.CannotReadTestDirectory(reason:)) ->
       heading(reason) <> "I couldn't list the contents of the test folder."
 
-    CannotGetTitles(titles.CannotReadTestFile(reason: reason, file: file)) ->
+    CannotGetTitles(titles.CannotReadTestFile(reason:, file:)) ->
       heading(reason)
       <> "I couldn't read the test file "
       <> ansi.italic("\"" <> file <> "\"\n")
 
     CannotGetTitles(titles.DuplicateLiteralTitles(
-      title: title,
+      title:,
       one: titles.TestInfo(file: one_file, test_name: one_test_name),
       other: titles.TestInfo(file: other_file, test_name: other_test_name),
     )) -> {
@@ -548,10 +542,10 @@ type Split {
 }
 
 fn snapshot_default_lines(snapshot: Snapshot(status)) -> List(InfoLine) {
-  let Snapshot(title: title, content: _, info: info) = snapshot
+  let Snapshot(title:, content: _, info:) = snapshot
   case info {
     None -> [InfoLineWithTitle(title, SplitWords, "title")]
-    Some(titles.TestInfo(file: file, test_name: test_name)) -> [
+    Some(titles.TestInfo(file:, test_name:)) -> [
       InfoLineWithTitle(title, SplitWords, "title"),
       InfoLineWithTitle(file, Truncate, "file"),
       InfoLineWithTitle(test_name, Truncate, "name"),
@@ -563,12 +557,12 @@ fn new_snapshot_box(
   snapshot: Snapshot(New),
   additional_info_lines: List(InfoLine),
 ) -> String {
-  let Snapshot(title: _, content: content, info: _) = snapshot
+  let Snapshot(title: _, content:, info: _) = snapshot
 
   let content =
     string.split(content, on: "\n")
     |> list.index_map(fn(line, i) {
-      DiffLine(number: i + 1, line: line, kind: diff.New)
+      DiffLine(number: i + 1, line:, kind: diff.New)
     })
 
   pretty_box(
@@ -641,7 +635,7 @@ fn pretty_box(
 fn pretty_info_line(line: InfoLine, width: Int) -> String {
   let #(prefix, prefix_length) = case line {
     InfoLineWithNoTitle(..) -> #("  ", 2)
-    InfoLineWithTitle(title: title, ..) -> #(
+    InfoLineWithTitle(title:, ..) -> #(
       "  " <> ansi.blue(title <> ": "),
       string.length(title) + 4,
     )
@@ -662,7 +656,7 @@ fn pretty_info_line(line: InfoLine, width: Int) -> String {
 }
 
 fn pretty_diff_line(diff_line: DiffLine, padding: Int) -> String {
-  let DiffLine(number: number, line: line, kind: kind) = diff_line
+  let DiffLine(number:, line:, kind:) = diff_line
 
   let #(pretty_number, pretty_line, separator) = case kind {
     diff.Shared -> #(
@@ -891,8 +885,7 @@ fn do_review(
       // We need to add to the new test info about its location and the function
       // it's defined in.
       let new_snapshot_info = case titles.find(titles, new_snapshot.title) {
-        Ok(titles.Prefix(info: info, ..)) | Ok(titles.Literal(info: info)) ->
-          Some(info)
+        Ok(titles.Prefix(info:, ..)) | Ok(titles.Literal(info:)) -> Some(info)
         Error(_) -> None
       }
       let new_snapshot = Snapshot(..new_snapshot, info: new_snapshot_info)

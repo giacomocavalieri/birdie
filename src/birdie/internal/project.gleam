@@ -1,5 +1,5 @@
 import filepath
-import simplifile
+import simplifile.{type FileError}
 
 /// Returns the path to the project's root.
 ///
@@ -7,11 +7,11 @@ import simplifile
 /// > sooner or later it will reach a `gleam.toml` file.
 /// > Otherwise this will end up in an infinite loop, I think.
 ///
-pub fn find_root() -> Result(String, simplifile.FileError) {
+pub fn find_root() -> Result(String, FileError) {
   do_find_root(".")
 }
 
-fn do_find_root(path: String) -> Result(String, simplifile.FileError) {
+fn do_find_root(path: String) -> Result(String, FileError) {
   let manifest = filepath.join(path, "gleam.toml")
   case simplifile.is_file(manifest) {
     Ok(True) -> Ok(path)

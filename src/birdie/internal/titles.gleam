@@ -88,12 +88,12 @@ fn add_literal_title(titles: Titles, title: String, info: TestInfo) -> Titles {
 // }
 
 pub fn literals(titles: Titles) -> Dict(String, TestInfo) {
-  let Titles(literals: literals, prefixes: _) = titles
+  let Titles(literals:, prefixes: _) = titles
   literals
 }
 
 pub fn prefixes(titles: Titles) -> Dict(String, TestInfo) {
-  let Titles(literals: _, prefixes: prefixes) = titles
+  let Titles(literals: _, prefixes:) = titles
   prefixes
   |> trie.to_list
   |> list.map(fn(pair) {
@@ -191,7 +191,7 @@ fn birdie_import(module: glance.Module) -> Result(BirdieImport, Nil) {
       module: "birdie",
       alias: birdie_alias,
       unqualified_types: _,
-      unqualified_values: unqualified_values,
+      unqualified_values:,
     ) -> {
       case birdie_alias {
         Some(glance.Discarded(_)) ->
@@ -236,21 +236,21 @@ fn snap_call(
     // argument is the unlabelled content. This means that the second argument
     // must be the title - labelled or not.
     glance.Call(
-      function: function,
+      function:,
       arguments: [
         glance.Field(None, title),
         glance.Field(Some("content"), _snapshot_content),
       ],
     )
     | glance.Call(
-        function: function,
+        function:,
         arguments: [
           glance.Field(None, _snapshot_content),
           glance.Field(_, title),
         ],
       )
     | glance.Call(
-        function: function,
+        function:,
         arguments: [
           glance.Field(Some("content"), _snapshot_content),
           glance.Field(_, title),
@@ -259,7 +259,7 @@ fn snap_call(
     | // A direct function call to the `birdie.snap` function where the first
       // argument is the labelled title.
       glance.Call(
-        function: function,
+        function:,
         arguments: [glance.Field(Some("title"), title), glance.Field(_, _)],
       )
     | // A call to the `birdie.snap` function where the title is piped into it
@@ -268,7 +268,7 @@ fn snap_call(
         name: glance.Pipe,
         left: title,
         right: glance.Call(
-          function: function,
+          function:,
           arguments: [glance.Field(Some("content"), _snapshot_content)],
         ),
       )
@@ -277,10 +277,7 @@ fn snap_call(
       glance.BinaryOperator(
         name: glance.Pipe,
         left: _snapshot_content,
-        right: glance.Call(
-          function: function,
-          arguments: [glance.Field(_, title)],
-        ),
+        right: glance.Call(function:, arguments: [glance.Field(_, title)]),
       )
     | // We pipe into `title: _`, since we're using a label we don't have to
       // check the position.
@@ -288,7 +285,7 @@ fn snap_call(
         name: glance.Pipe,
         left: title,
         right: glance.FnCapture(
-          function: function,
+          function:,
           label: Some("title"),
           arguments_before: _,
           arguments_after: _,
@@ -301,7 +298,7 @@ fn snap_call(
         name: glance.Pipe,
         left: title,
         right: glance.FnCapture(
-          function: function,
+          function:,
           label: _,
           arguments_before: [glance.Field(None, _snapshot_content)],
           arguments_after: [],
@@ -395,7 +392,7 @@ fn try_fold_expression(
     glance.Tuple(expressions) | glance.List(expressions, None) ->
       try_fold_expressions(expressions, acc, fun)
 
-    glance.List(elements: elements, rest: Some(rest)) -> {
+    glance.List(elements:, rest: Some(rest)) -> {
       use acc <- result.try(try_fold_expressions(elements, acc, fun))
       try_fold_expression(rest, acc, fun)
     }
@@ -403,34 +400,24 @@ fn try_fold_expression(
     glance.Fn(arguments: _, return_annotation: _, body: statements) ->
       try_fold_statements(statements, acc, fun)
 
-    glance.RecordUpdate(
-      module: _,
-      constructor: _,
-      record: record,
-      fields: fields,
-    ) -> {
+    glance.RecordUpdate(module: _, constructor: _, record:, fields:) -> {
       use acc <- result.try(try_fold_expression(record, acc, fun))
       use acc, #(_field, expression) <- list.try_fold(over: fields, from: acc)
       try_fold_expression(expression, acc, fun)
     }
 
-    glance.Call(function: function, arguments: arguments) -> {
+    glance.Call(function:, arguments:) -> {
       use acc <- result.try(try_fold_expression(function, acc, fun))
       try_fold_fields(arguments, acc, fun)
     }
 
-    glance.FnCapture(
-      label: _,
-      function: function,
-      arguments_before: arguments_before,
-      arguments_after: arguments_after,
-    ) -> {
+    glance.FnCapture(label: _, function:, arguments_before:, arguments_after:) -> {
       use acc <- result.try(try_fold_expression(function, acc, fun))
       use acc <- result.try(try_fold_fields(arguments_before, acc, fun))
       try_fold_fields(arguments_after, acc, fun)
     }
 
-    glance.BitString(segments: segments) -> {
+    glance.BitString(segments:) -> {
       use acc, #(segment, options) <- list.try_fold(over: segments, from: acc)
       use acc <- result.try(try_fold_expression(segment, acc, fun))
       use acc, option <- list.try_fold(over: options, from: acc)
@@ -441,12 +428,12 @@ fn try_fold_expression(
       }
     }
 
-    glance.Case(subjects: subjects, clauses: clauses) -> {
+    glance.Case(subjects:, clauses:) -> {
       use acc <- result.try(try_fold_expressions(subjects, acc, fun))
       try_fold_clauses(clauses, acc, fun)
     }
 
-    glance.BinaryOperator(name: _, left: left, right: right) -> {
+    glance.BinaryOperator(name: _, left:, right:) -> {
       use acc <- result.try(try_fold_expression(left, acc, fun))
       try_fold_expression(right, acc, fun)
     }
@@ -470,9 +457,9 @@ fn try_fold_clauses(
 ) -> Result(a, b) {
   use acc, clause <- list.try_fold(over: clauses, from: acc)
   case clause {
-    glance.Clause(patterns: _, guard: None, body: body) ->
+    glance.Clause(patterns: _, guard: None, body:) ->
       try_fold_expression(body, acc, fun)
-    glance.Clause(patterns: _, guard: Some(guard), body: body) -> {
+    glance.Clause(patterns: _, guard: Some(guard), body:) -> {
       use acc <- result.try(try_fold_expression(guard, acc, fun))
       try_fold_expression(body, acc, fun)
     }
