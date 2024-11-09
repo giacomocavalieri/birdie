@@ -11,6 +11,6 @@ jobs:
   test:
     uses: TanklesXL/gleam_actions/.github/workflows/test.yaml@main
     with:
-      gleam_version: 1.3.1
+      gleam_version: 1.5.1
       test_node: false
       test_erlang: true

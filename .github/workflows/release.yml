@@ -12,7 +12,7 @@ jobs:
       HEXPM_USER: ${{ secrets.HEXPM_USER }}
       HEXPM_PASS: ${{ secrets.HEXPM_PASS }}
     with:
-      gleam_version: 1.3.1
+      gleam_version: 1.5.1
       erlang_version: 27
       test_erlang: true
       test_node: false
