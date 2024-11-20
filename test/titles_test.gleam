@@ -84,7 +84,7 @@ fn assert_titles(module: String) -> titles.Titles {
 fn pretty_titles(ts: titles.Titles) -> String {
   let pretty = fn(title, info) {
     let titles.TestInfo(file: file, test_name: test_name) = info
-    let title = string.pad_right(title, to: 40, with: " ")
+    let title = string.pad_end(title, to: 40, with: " ")
     let info = "[" <> test_name <> " - " <> file <> "]"
     title <> " " <> info
   }

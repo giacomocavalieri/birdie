@@ -661,7 +661,7 @@ fn pretty_diff_line(diff_line: DiffLine, padding: Int) -> String {
   let #(pretty_number, pretty_line, separator) = case kind {
     diff.Shared -> #(
       int.to_string(number)
-        |> string.pad_left(to: padding - 1, with: " ")
+        |> string.pad_start(to: padding - 1, with: " ")
         |> ansi.dim,
       ansi.dim(line),
       " │ ",
@@ -669,7 +669,7 @@ fn pretty_diff_line(diff_line: DiffLine, padding: Int) -> String {
 
     diff.New -> #(
       int.to_string(number)
-        |> string.pad_left(to: padding - 1, with: " ")
+        |> string.pad_start(to: padding - 1, with: " ")
         |> ansi.green
         |> ansi.bold,
       ansi.green(line),
@@ -679,7 +679,7 @@ fn pretty_diff_line(diff_line: DiffLine, padding: Int) -> String {
     diff.Old -> {
       let number =
         { " " <> int.to_string(number) }
-        |> string.pad_right(to: padding - 1, with: " ")
+        |> string.pad_end(to: padding - 1, with: " ")
       #(ansi.red(number), ansi.red(line), ansi.red(" - "))
     }
   }
