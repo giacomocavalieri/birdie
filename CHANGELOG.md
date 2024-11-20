@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.4 - 2024-11-20
+
+- ⬆️ Update `stdlib` to `>= 0.43.0 and < 1.0.0` and remove deprecated code.
+
 ## 1.2.3 - 2024-09-06
 
 - 🐛 Fixed a bug where birdie would strip `\r\n` out of a snapshot content

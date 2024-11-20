@@ -17,7 +17,7 @@ import justin
 import rank
 import simplifile
 
-const birdie_version = "1.2.3"
+const birdie_version = "1.2.4"
 
 const birdie_snapshots_folder = "birdie_snapshots"
 
