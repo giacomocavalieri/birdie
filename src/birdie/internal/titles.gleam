@@ -238,29 +238,46 @@ fn snap_call(
     glance.Call(
       function:,
       arguments: [
-        glance.Field(None, title),
-        glance.Field(Some("content"), _snapshot_content),
+        glance.UnlabelledField(title),
+        glance.LabelledField("content", _snapshot_content),
       ],
     )
     | glance.Call(
         function:,
         arguments: [
-          glance.Field(None, _snapshot_content),
-          glance.Field(_, title),
+          glance.UnlabelledField(_snapshot_content),
+          glance.LabelledField(_, title),
         ],
       )
     | glance.Call(
         function:,
         arguments: [
-          glance.Field(Some("content"), _snapshot_content),
-          glance.Field(_, title),
+          glance.UnlabelledField(_snapshot_content),
+          glance.UnlabelledField(title),
+        ],
+      )
+    | glance.Call(
+        function:,
+        arguments: [
+          glance.LabelledField("content", _snapshot_content),
+          glance.LabelledField(_, title),
         ],
       )
     | // A direct function call to the `birdie.snap` function where the first
       // argument is the labelled title.
       glance.Call(
         function:,
-        arguments: [glance.Field(Some("title"), title), glance.Field(_, _)],
+        arguments: [
+          glance.LabelledField("title", title),
+          glance.LabelledField(_, _),
+        ],
+      )
+    | glance.Call(
+        function:,
+        arguments: [
+          glance.LabelledField("title", title),
+          glance.UnlabelledField(_),
+        ],
       )
     | // A call to the `birdie.snap` function where the title is piped into it
       // and the content is passed as a labelled argument.
@@ -269,7 +286,7 @@ fn snap_call(
         left: title,
         right: glance.Call(
           function:,
-          arguments: [glance.Field(Some("content"), _snapshot_content)],
+          arguments: [glance.LabelledField("content", _snapshot_content)],
         ),
       )
     | // A call to the `birdie.snap` function where the content is piped into
@@ -277,7 +294,18 @@ fn snap_call(
       glance.BinaryOperator(
         name: glance.Pipe,
         left: _snapshot_content,
-        right: glance.Call(function:, arguments: [glance.Field(_, title)]),
+        right: glance.Call(
+          function:,
+          arguments: [glance.LabelledField(_, title)],
+        ),
+      )
+    | glance.BinaryOperator(
+        name: glance.Pipe,
+        left: _snapshot_content,
+        right: glance.Call(
+          function:,
+          arguments: [glance.UnlabelledField(title)],
+        ),
       )
     | // We pipe into `title: _`, since we're using a label we don't have to
       // check the position.
@@ -300,7 +328,7 @@ fn snap_call(
         right: glance.FnCapture(
           function:,
           label: _,
-          arguments_before: [glance.Field(None, _snapshot_content)],
+          arguments_before: [glance.UnlabelledField(_snapshot_content)],
           arguments_after: [],
         ),
       ) -> {
@@ -402,8 +430,14 @@ fn try_fold_expression(
 
     glance.RecordUpdate(module: _, constructor: _, record:, fields:) -> {
       use acc <- result.try(try_fold_expression(record, acc, fun))
-      use acc, #(_field, expression) <- list.try_fold(over: fields, from: acc)
-      try_fold_expression(expression, acc, fun)
+      use acc, glance.RecordUpdateField(label: _field, item: expression) <- list.try_fold(
+        over: fields,
+        from: acc,
+      )
+      case expression {
+        Some(expression) -> try_fold_expression(expression, acc, fun)
+        None -> Ok(acc)
+      }
     }
 
     glance.Call(function:, arguments:) -> {
@@ -446,8 +480,13 @@ fn try_fold_fields(
   fun: fn(a, glance.Expression) -> Result(a, b),
 ) -> Result(a, b) {
   use acc, field <- list.try_fold(over: fields, from: acc)
-  let glance.Field(item: expression, label: _) = field
-  try_fold_expression(expression, acc, fun)
+  case field {
+    glance.LabelledField(item: expression, label: _) ->
+      try_fold_expression(expression, acc, fun)
+    glance.UnlabelledField(item: expression) ->
+      try_fold_expression(expression, acc, fun)
+    glance.ShorthandField(label: _) -> Ok(acc)
+  }
 }
 
 fn try_fold_clauses(
