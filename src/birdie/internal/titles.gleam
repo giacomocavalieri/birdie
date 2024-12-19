@@ -252,6 +252,13 @@ fn snap_call(
     | glance.Call(
         function:,
         arguments: [
+          glance.UnlabelledField(_snapshot_content),
+          glance.UnlabelledField(title),
+        ],
+      )
+    | glance.Call(
+        function:,
+        arguments: [
           glance.LabelledField("content", _snapshot_content),
           glance.LabelledField(_, title),
         ],
@@ -461,8 +468,7 @@ fn try_fold_fields(
       try_fold_expression(expression, acc, fun)
     glance.UnlabelledField(item: expression) ->
       try_fold_expression(expression, acc, fun)
-    glance.ShorthandField(label: _) ->
-      panic as "No expression in shorthand field"
+    glance.ShorthandField(label: _) -> Ok(acc)
   }
 }
 
