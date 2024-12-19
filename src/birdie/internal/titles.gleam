@@ -272,6 +272,13 @@ fn snap_call(
           glance.LabelledField(_, _),
         ],
       )
+    | glance.Call(
+        function:,
+        arguments: [
+          glance.LabelledField("title", title),
+          glance.UnlabelledField(_),
+        ],
+      )
     | // A call to the `birdie.snap` function where the title is piped into it
       // and the content is passed as a labelled argument.
       glance.BinaryOperator(
@@ -290,6 +297,14 @@ fn snap_call(
         right: glance.Call(
           function:,
           arguments: [glance.LabelledField(_, title)],
+        ),
+      )
+    | glance.BinaryOperator(
+        name: glance.Pipe,
+        left: _snapshot_content,
+        right: glance.Call(
+          function:,
+          arguments: [glance.UnlabelledField(title)],
         ),
       )
     | // We pipe into `title: _`, since we're using a label we don't have to
@@ -419,8 +434,10 @@ fn try_fold_expression(
         over: fields,
         from: acc,
       )
-      let assert Some(expression) = expression
-      try_fold_expression(expression, acc, fun)
+      case expression {
+        Some(expression) -> try_fold_expression(expression, acc, fun)
+        None -> Ok(acc)
+      }
     }
 
     glance.Call(function:, arguments:) -> {
