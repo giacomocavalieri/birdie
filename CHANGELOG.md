@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.5 - 2024-12-20
+
+- ⬆️ Update `glance` to `>= 2.0.0 and < 3.0.0`.
+
 ## 1.2.4 - 2024-11-20
 
 - ⬆️ Update `stdlib` to `>= 0.43.0 and < 1.0.0` and remove deprecated code.
