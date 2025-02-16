@@ -16,6 +16,7 @@ import gleam_community/ansi
 import justin
 import rank
 import simplifile
+import term_size
 
 const birdie_version = "1.2.5"
 
@@ -1037,32 +1038,30 @@ fn report_status(result: Result(Nil, Error)) -> Nil {
   }
 }
 
+fn terminal_width() -> Int {
+  case term_size.get() {
+    Ok(#(_, columns)) -> columns
+    Error(_) -> 80
+  }
+}
+
 // --- FFI ---------------------------------------------------------------------
 
 /// Clear the screen.
 ///
-@external(erlang, "birdie_ffi_erl", "clear")
-fn clear() -> Nil
+fn clear() -> Nil {
+  io.print("\u{1b}c")
+  io.print("\u{1b}[H\u{1b}[J")
+}
 
 /// Move the cursor up a given number of lines.
 ///
-@external(erlang, "birdie_ffi_erl", "cursor_up")
-fn cursor_up(n: Int) -> Nil
+fn cursor_up(n: Int) -> Nil {
+  io.print("\u{1b}[" <> int.to_string(n) <> "A")
+}
 
 /// Clear the line the cursor is currently on.
 ///
-@external(erlang, "birdie_ffi_erl", "clear_line")
-fn clear_line() -> Nil
-
-fn terminal_width() -> Int {
-  result.unwrap(do_terminal_width(), or: 80)
-}
-
-@external(erlang, "birdie_ffi_erl", "terminal_width")
-@external(javascript, "./birdie_ffi_js.mjs", "terminal_width")
-fn do_terminal_width() -> Result(Int, Nil) {
-  // We have a default implementation that will fail on all other targets so
-  // that it can be unwrapped to a default value and we stay compatible with
-  // all future Gleam's targets.
-  Error(Nil)
+fn clear_line() -> Nil {
+  io.print("\u{1b}[2K")
 }

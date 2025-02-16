@@ -18,6 +18,7 @@ filepath = ">= 1.1.0 and < 2.0.0"
 trie_again = ">= 1.1.2 and < 2.0.0"
 simplifile = ">= 2.2.0 and < 3.0.0"
 edit_distance = ">= 2.0.1 and < 3.0.0"
+term_size = ">= 1.0.1 and < 2.0.0"
 
 [dev-dependencies]
 gleeunit = ">= 1.2.0 and < 2.0.0"
