@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.6 - 2025-02-16
+
+- 🔥 Move ffi code to pure Gleam implementation.
+
 ## 1.2.5 - 2024-12-20
 
 - ⬆️ Update `glance` to `>= 2.0.0 and < 3.0.0`.
