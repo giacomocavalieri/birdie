@@ -1,7 +1,7 @@
 name = "birdie"
 version = "1.2.5"
 
-description = "Snapshot testing in Gleam"
+description = "🐦‍⬛ Snapshot testing in Gleam"
 licences = ["Apache-2.0"]
 repository = { type = "github", user = "giacomocavalieri", repo = "birdie" }
 target = "erlang"
