@@ -5,12 +5,17 @@ on:
     branches:
       - main
   pull_request:
-  workflow_call:
 
 jobs:
   test:
-    uses: TanklesXL/gleam_actions/.github/workflows/test.yaml@main
-    with:
-      gleam_version: 1.5.1
-      test_node: false
-      test_erlang: true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "27.1.2"
+          gleam-version: "1.8.1"
+          rebar3-version: "3"
+      - run: gleam deps download
+      - run: gleam test
+      - run: gleam format --check src test
