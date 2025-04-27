@@ -1,5 +1,5 @@
 name = "birdie"
-version = "1.2.6"
+version = "1.2.7"
 
 description = "🐦‍⬛ Snapshot testing in Gleam"
 licences = ["Apache-2.0"]
