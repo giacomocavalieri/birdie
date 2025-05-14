@@ -105,7 +105,7 @@ pub fn prefixes(titles: Titles) -> Dict(String, TestInfo) {
 
 // --- TITLE LOOKUP ------------------------------------------------------------
 
-pub fn find(titles: Titles, title: String) -> Result(Match, Nil) {
+pub fn find(titles: Titles, title title: String) -> Result(Match, Nil) {
   // We first look for exact matches.
   let literal_match = result.map(dict.get(titles.literals, title), Literal)
   use <- result.lazy_or(literal_match)
