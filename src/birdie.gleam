@@ -5,7 +5,6 @@ import birdie/internal/titles
 import edit_distance/levenshtein
 import filepath
 import gleam/bool
-import gleam/erlang
 import gleam/int
 import gleam/io
 import gleam/list
@@ -816,7 +815,7 @@ fn suggest_run_command(invalid: String, command: Command) -> Nil {
     <> command_to_string(command)
     <> "`, would you like me to run it instead? [Y/n] "
 
-  case erlang.get_line(msg) {
+  case get_line(msg) {
     Error(_) -> Nil
     Ok(line) ->
       case string.lowercase(line) |> string.trim {
@@ -950,7 +949,7 @@ fn ask_choice() -> Result(ReviewChoice, Error) {
   // We clear the line of any possible garbage that might still be there from
   // a previous prompt of the same method.
   clear_line()
-  case result.map(erlang.get_line("> "), string.trim) {
+  case result.map(get_line("> "), string.trim) {
     Ok("a") -> Ok(AcceptSnapshot)
     Ok("r") -> Ok(RejectSnapshot)
     Ok("s") -> Ok(SkipSnapshot)
@@ -1065,3 +1064,15 @@ fn cursor_up(n: Int) -> Nil {
 fn clear_line() -> Nil {
   io.print("\u{1b}[2K")
 }
+
+/// Reads a line from standard input with the given prompt.
+///
+/// # Example
+///
+/// ```gleam
+/// get_line("Language: ")
+/// // > Language: <- Gleam
+/// // -> Ok("Gleam\n")
+/// ```
+@external(erlang, "birdie_ffi", "get_line")
+fn get_line(prompt prompt: String) -> Result(String, Nil)
