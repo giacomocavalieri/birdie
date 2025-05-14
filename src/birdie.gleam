@@ -23,6 +23,10 @@ const birdie_snapshots_folder = "birdie_snapshots"
 
 const hint_review_message = "run `gleam run -m birdie` to review the snapshots"
 
+const accepted_extension = "accepted"
+
+const new_extension = "new"
+
 type Error {
   SnapshotWithEmptyTitle
 
@@ -332,7 +336,28 @@ fn list_new_snapshots(in folder: String) -> Result(List(String), Error) {
         case filepath.extension(file) {
           // Only keep the files with the ".new" extension and join their name
           // with the folder's path.
-          Ok("new") -> Ok(filepath.join(folder, file))
+          Ok(extension) if extension == new_extension ->
+            Ok(filepath.join(folder, file))
+          _ -> Error(Nil)
+        }
+      })
+  }
+}
+
+/// List all the accepted snapshots in a folder. Every file is automatically
+/// prepended with the folder so you get the full path of each file.
+///
+fn list_accepted_snapshots(in folder: String) -> Result(List(String), Error) {
+  case simplifile.read_directory(folder) {
+    Error(reason) -> Error(CannotReadSnapshots(reason:, folder:))
+    Ok(files) ->
+      Ok({
+        use file <- list.filter_map(files)
+        case filepath.extension(file) {
+          // Only keep the files with the ".accepted" extension and join their
+          // name with the folder's path.
+          Ok(extension) if extension == accepted_extension ->
+            Ok(filepath.join(folder, file))
           _ -> Error(Nil)
         }
       })
@@ -409,7 +434,7 @@ fn file_name(title: String) -> String {
 /// Returns the path where a new snapshot should be saved.
 ///
 fn new_destination(snapshot: Snapshot(New), folder: String) -> String {
-  filepath.join(folder, file_name(snapshot.title)) <> ".new"
+  filepath.join(folder, file_name(snapshot.title)) <> "." <> new_extension
 }
 
 /// Turns a new snapshot path into the path of the corresponding accepted
@@ -417,7 +442,7 @@ fn new_destination(snapshot: Snapshot(New), folder: String) -> String {
 ///
 fn to_accepted_path(file: String) -> String {
   // This just replaces the `.new` extension with the `.accepted` one.
-  filepath.strip_extension(file) <> ".accepted"
+  filepath.strip_extension(file) <> "." <> accepted_extension
 }
 
 // --- PRETTY PRINTING ---------------------------------------------------------
@@ -867,10 +892,49 @@ fn closest_command(to string: String) -> Result(Command, Nil) {
 
 fn review() -> Result(Nil, Error) {
   use snapshots_folder <- result.try(find_snapshots_folder())
-
   let get_titles = titles.from_test_directory()
   use titles <- result.try(result.map_error(get_titles, CannotGetTitles))
+  use _ <- result.try(update_accepted_snapshots(snapshots_folder, titles))
 
+  // Before reviewing, we want to update the files of all the existing snapshots
+  // because they might have been moved to a different module, changing their
+  // source `file`.
+  use _ <- result.try(do_review(snapshots_folder, titles))
+  Ok(Nil)
+}
+
+fn update_accepted_snapshots(
+  snapshots_folder: String,
+  titles: titles.Titles,
+) -> Result(Nil, Error) {
+  use accepted_snapshots <- result.try(list_accepted_snapshots(snapshots_folder))
+  use accepted_snapshot <- list.try_each(accepted_snapshots)
+  use snapshot <- result.try(read_accepted(accepted_snapshot))
+  case snapshot {
+    None -> Ok(Nil)
+    Some(Snapshot(title:, content: _, info:) as snapshot) ->
+      case titles.find(titles, title), info {
+        Ok(match), Some(existing_info) if match.info != existing_info ->
+          Snapshot(..snapshot, info: Some(match.info))
+          |> serialise
+          |> simplifile.write(to: accepted_snapshot)
+          |> result.map_error(CannotAcceptSnapshot(_, accepted_snapshot))
+
+        Ok(match), None ->
+          Snapshot(..snapshot, info: Some(match.info))
+          |> serialise
+          |> simplifile.write(to: accepted_snapshot)
+          |> result.map_error(CannotAcceptSnapshot(_, accepted_snapshot))
+
+        _, _ -> Ok(Nil)
+      }
+  }
+}
+
+fn do_review(
+  snapshots_folder: String,
+  titles: titles.Titles,
+) -> Result(Nil, Error) {
   use new_snapshots <- result.try(list_new_snapshots(in: snapshots_folder))
   case list.length(new_snapshots) {
     // If there's no snapshots to review, we're done!
@@ -880,7 +944,7 @@ fn review() -> Result(Nil, Error) {
     }
     // If there's snapshots to review start the interactive session.
     n -> {
-      let result = do_review(new_snapshots, titles, 1, n, ShowDiff)
+      let result = review_loop(new_snapshots, titles, 1, n, ShowDiff)
       // Despite the review process ending well or with an error, we want to
       // clear the screen of any garbage before showing the error explanation
       // or the happy completion string.
@@ -897,7 +961,8 @@ fn review() -> Result(Nil, Error) {
   }
 }
 
-fn do_review(
+/// Reviews all the new snapshots one by one.
+fn review_loop(
   new_snapshot_paths: List(String),
   titles: titles.Titles,
   current: Int,
@@ -945,18 +1010,18 @@ fn do_review(
       case choice {
         AcceptSnapshot -> {
           use _ <- result.try(accept_snapshot(new_snapshot_path, titles))
-          do_review(rest, titles, current + 1, out_of, mode)
+          review_loop(rest, titles, current + 1, out_of, mode)
         }
         RejectSnapshot -> {
           use _ <- result.try(reject_snapshot(new_snapshot_path))
-          do_review(rest, titles, current + 1, out_of, mode)
+          review_loop(rest, titles, current + 1, out_of, mode)
         }
         SkipSnapshot -> {
-          do_review(rest, titles, current + 1, out_of, mode)
+          review_loop(rest, titles, current + 1, out_of, mode)
         }
         ToggleDiffView -> {
           let mode = toggle_mode(mode)
-          do_review(new_snapshot_paths, titles, current, out_of, mode)
+          review_loop(new_snapshot_paths, titles, current, out_of, mode)
         }
       }
     }
@@ -1045,6 +1110,7 @@ fn accept_all() -> Result(Nil, Error) {
 
   let get_titles = titles.from_test_directory()
   use titles <- result.try(result.map_error(get_titles, CannotGetTitles))
+  use _ <- result.try(update_accepted_snapshots(snapshots_folder, titles))
 
   case list.length(new_snapshots) {
     0 -> io.println("No new snapshots to accept.")
@@ -1059,6 +1125,10 @@ fn reject_all() -> Result(Nil, Error) {
   io.println("Looking for new snapshots...")
   use snapshots_folder <- result.try(find_snapshots_folder())
   use new_snapshots <- result.try(list_new_snapshots(in: snapshots_folder))
+
+  let get_titles = titles.from_test_directory()
+  use titles <- result.try(result.map_error(get_titles, CannotGetTitles))
+  use _ <- result.try(update_accepted_snapshots(snapshots_folder, titles))
 
   case list.length(new_snapshots) {
     0 -> io.println("No new snapshots to reject.")

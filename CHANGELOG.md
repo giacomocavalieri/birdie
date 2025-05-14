@@ -4,6 +4,8 @@
 
 - When reviewing snapshots with birdie there's now an option to hide the diff
   view.
+- When running `gleam run -m birdie` birdie will now update all the accepted
+  snapshots' info if they've been moved to a different module.
 
 ## 1.2.7 - 2025-04-27
 
