@@ -569,6 +569,7 @@ fn new_snapshot_box(
     "new snapshot",
     content,
     list.flatten([snapshot_default_lines(snapshot), additional_info_lines]),
+    fn(shared_line) { shared_line },
   )
 }
 
@@ -590,6 +591,28 @@ fn diff_snapshot_box(
       ],
     ]
       |> list.flatten,
+    fn(shared_line) { ansi.dim(shared_line) },
+  )
+}
+
+fn regular_snapshot_box(
+  new: Snapshot(New),
+  additional_info_lines: List(InfoLine),
+) {
+  let Snapshot(title: _, content:, info: _) = new
+
+  let content =
+    string.split(content, on: "\n")
+    |> list.index_map(fn(line, i) {
+      DiffLine(number: i + 1, line:, kind: diff.Shared)
+    })
+
+  pretty_box(
+    "mismatched snapshots",
+    content,
+    [snapshot_default_lines(new), additional_info_lines]
+      |> list.flatten,
+    fn(shared_line) { shared_line },
   )
 }
 
@@ -597,6 +620,8 @@ fn pretty_box(
   title: String,
   content_lines: List(DiffLine),
   info_lines: List(InfoLine),
+  // Determines how a shared diff line is to be displayed
+  shared_line_style: fn(String) -> String,
 ) -> String {
   let width = terminal_width()
   let assert Ok(padding) = {
@@ -617,7 +642,7 @@ fn pretty_box(
 
   // Add numbers to the content's lines.
   let content =
-    list.map(content_lines, pretty_diff_line(_, padding))
+    list.map(content_lines, pretty_diff_line(_, padding, shared_line_style))
     |> string.join(with: "\n")
 
   // The open and closed delimiters for the box main content.
@@ -655,7 +680,11 @@ fn pretty_info_line(line: InfoLine, width: Int) -> String {
   }
 }
 
-fn pretty_diff_line(diff_line: DiffLine, padding: Int) -> String {
+fn pretty_diff_line(
+  diff_line: DiffLine,
+  padding: Int,
+  shared_line_style: fn(String) -> String,
+) -> String {
   let DiffLine(number:, line:, kind:) = diff_line
 
   let #(pretty_number, pretty_line, separator) = case kind {
@@ -663,7 +692,7 @@ fn pretty_diff_line(diff_line: DiffLine, padding: Int) -> String {
       int.to_string(number)
         |> string.pad_start(to: padding - 1, with: " ")
         |> ansi.dim,
-      ansi.dim(line),
+      shared_line_style(line),
       " │ ",
     )
 
@@ -851,7 +880,7 @@ fn review() -> Result(Nil, Error) {
     }
     // If there's snapshots to review start the interactive session.
     n -> {
-      let result = do_review(new_snapshots, titles, 1, n)
+      let result = do_review(new_snapshots, titles, 1, n, ShowDiff)
       // Despite the review process ending well or with an error, we want to
       // clear the screen of any garbage before showing the error explanation
       // or the happy completion string.
@@ -873,6 +902,7 @@ fn do_review(
   titles: titles.Titles,
   current: Int,
   out_of: Int,
+  mode: ReviewMode,
 ) -> Result(Nil, Error) {
   case new_snapshot_paths {
     [] -> Ok(Nil)
@@ -901,24 +931,49 @@ fn do_review(
 
       // If there's no accepted snapshot then we're just reviewing a new
       // snapshot. Otherwise we show a nice diff.
-      let box = case accepted_snapshot {
-        None -> new_snapshot_box(new_snapshot, [])
-        Some(accepted_snapshot) ->
+      let box = case accepted_snapshot, mode {
+        None, _ -> new_snapshot_box(new_snapshot, [])
+        Some(accepted_snapshot), ShowDiff ->
           diff_snapshot_box(accepted_snapshot, new_snapshot, [])
+        Some(_accepted_snapshot), HideDiff ->
+          regular_snapshot_box(new_snapshot, [])
       }
       io.println(progress <> "\n\n" <> box <> "\n")
 
       // We ask the user what to do with this snapshot.
-      use choice <- result.try(ask_choice())
-      use _ <- result.try(case choice {
-        AcceptSnapshot -> accept_snapshot(new_snapshot_path, titles)
-        RejectSnapshot -> reject_snapshot(new_snapshot_path)
-        SkipSnapshot -> Ok(Nil)
-      })
-
-      // Let's keep going with the remaining snapshots.
-      do_review(rest, titles, current + 1, out_of)
+      use choice <- result.try(ask_choice(mode))
+      case choice {
+        AcceptSnapshot -> {
+          use _ <- result.try(accept_snapshot(new_snapshot_path, titles))
+          do_review(rest, titles, current + 1, out_of, mode)
+        }
+        RejectSnapshot -> {
+          use _ <- result.try(reject_snapshot(new_snapshot_path))
+          do_review(rest, titles, current + 1, out_of, mode)
+        }
+        SkipSnapshot -> {
+          do_review(rest, titles, current + 1, out_of, mode)
+        }
+        ToggleDiffView -> {
+          let mode = toggle_mode(mode)
+          do_review(new_snapshot_paths, titles, current, out_of, mode)
+        }
+      }
     }
+  }
+}
+
+/// Wether or not we should be showing a diff during the current review process.
+///
+type ReviewMode {
+  ShowDiff
+  HideDiff
+}
+
+fn toggle_mode(mode: ReviewMode) -> ReviewMode {
+  case mode {
+    ShowDiff -> HideDiff
+    HideDiff -> ShowDiff
   }
 }
 
@@ -928,24 +983,42 @@ type ReviewChoice {
   AcceptSnapshot
   RejectSnapshot
   SkipSnapshot
+  ToggleDiffView
 }
 
 /// Asks the user to make a choice: it first prints a reminder of the options
 /// and waits for the user to choose one.
 /// Will prompt again if the choice is not amongst the possible options.
 ///
-fn ask_choice() -> Result(ReviewChoice, Error) {
+fn ask_choice(mode: ReviewMode) -> Result(ReviewChoice, Error) {
+  let diff_message = case mode {
+    HideDiff -> " show diff  "
+    ShowDiff -> " hide diff  "
+  }
+
   io.println(
-    ansi.bold(ansi.green("  a"))
-    <> " accept  "
-    <> ansi.dim("accept the new snapshot\n")
-    <> ansi.bold(ansi.red("  r"))
-    <> " reject  "
-    <> ansi.dim("reject the new snapshot\n")
-    <> ansi.bold(ansi.yellow("  s"))
-    <> " skip    "
-    <> ansi.dim("skip the snapshot for now\n"),
+    {
+      ansi.bold(ansi.green("  a"))
+      <> " accept     "
+      <> ansi.dim("accept the new snapshot\n")
+    }
+    <> {
+      ansi.bold(ansi.red("  r"))
+      <> " reject     "
+      <> ansi.dim("reject the new snapshot\n")
+    }
+    <> {
+      ansi.bold(ansi.yellow("  s"))
+      <> " skip       "
+      <> ansi.dim("skip the snapshot for now\n")
+    }
+    <> {
+      ansi.bold(ansi.cyan("  d"))
+      <> diff_message
+      <> ansi.dim("toggle snapshot diff\n")
+    },
   )
+
   // We clear the line of any possible garbage that might still be there from
   // a previous prompt of the same method.
   clear_line()
@@ -953,12 +1026,13 @@ fn ask_choice() -> Result(ReviewChoice, Error) {
     Ok("a") -> Ok(AcceptSnapshot)
     Ok("r") -> Ok(RejectSnapshot)
     Ok("s") -> Ok(SkipSnapshot)
+    Ok("d") -> Ok(ToggleDiffView)
     // If the choice is not one of the proposed ones we move the cursor back to
     // the top of where it was and print everything once again, asking for a
     // valid option.
     Ok(_) -> {
-      cursor_up(5)
-      ask_choice()
+      cursor_up(6)
+      ask_choice(mode)
     }
     Error(_) -> Error(CannotReadUserInput)
   }

@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- When reviewing snapshots with birdie there's now an option to hide the diff
+  view.
+
 ## 1.2.7 - 2025-04-27
 
 - ⬆️ Update `glance` to `>= 2.0.0 and < 4.0.0`.
