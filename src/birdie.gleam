@@ -17,7 +17,7 @@ import rank
 import simplifile
 import term_size
 
-const birdie_version = "1.2.7"
+const birdie_version = "1.3.0"
 
 const birdie_snapshots_folder = "birdie_snapshots"
 

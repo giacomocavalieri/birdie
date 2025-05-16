@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.3.0 - 2025-05-16
 
 - When reviewing snapshots with birdie there's now an option to hide the diff
   view.
