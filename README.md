@@ -93,26 +93,10 @@ own Gleam types into a `String` before snapping those: this way you have total
 freedom and will be able to choose a format that makes sense to you and makes
 things easier to review!
 
-If you don't want to write serialisers for yourself and are ok with a default
-look then I recommend you try using the [`pprint`](https://hexdocs.pm/pprint/)
-package.
-It's an awesome package that can turn any Gleam type into a pretty string that
-will work perfectly with Birdie and produce nice diffs out of the box.
-I'm sure most of the times you won't feel the need to use anything else!
-
-```gleam
-import birdie
-import pprint
-
-pub fn a_snapshot_test() {
-  Ok([1, 2, 3])
-  |> pprint.format
-  // ^^^^^^^^^^^^^
-  // pprint does all the hard work of turning
-  // any value into a pretty string!
-  |> birdie.snap(title: "a snapshot test using pprint's output")
-}
-```
+The time spent making snapshots nicer is well worth the effort and will pay
+dividends as your test suite grows! You absolutely want to be intentional about
+the look of your snapshots, crafting one that makes it easy to review them.
+[I have an entire talk about this!](https://www.youtube.com/watch?v=DpakV96jeRk)
 
 ## References
 
