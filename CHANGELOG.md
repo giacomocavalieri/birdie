@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.1 - 2025-05-30
+
+- Updated the `glance` dependency to `>= 5.0.0 and < 6.0.0`.
+
 ## 1.3.0 - 2025-05-16
 
 - When reviewing snapshots with birdie there's now an option to hide the diff
