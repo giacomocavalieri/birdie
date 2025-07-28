@@ -811,6 +811,16 @@ fn command_to_string(command: Command) -> String {
   }
 }
 
+fn parse_command(arguments: List(String)) -> Result(Command, Nil) {
+  case arguments {
+    [] | ["review"] -> Ok(Review)
+    ["accept-all"] | ["accept", "all"] -> Ok(AcceptAll)
+    ["reject-all"] | ["reject", "all"] -> Ok(RejectAll)
+    ["help"] -> Ok(Help)
+    _ -> Error(Nil)
+  }
+}
+
 /// Reviews the snapshots in the project's folder.
 /// This function will behave differently depending on the command line
 /// arguments provided to the program.
@@ -837,16 +847,6 @@ pub fn main() -> Nil {
           }
         subcommands -> more_than_one_command(subcommands)
       }
-  }
-}
-
-fn parse_command(arguments: List(String)) {
-  case arguments {
-    [] | ["review"] -> Ok(Review)
-    ["accept-all"] | ["accept", "all"] -> Ok(AcceptAll)
-    ["reject-all"] | ["reject", "all"] -> Ok(RejectAll)
-    ["help"] -> Ok(Help)
-    _ -> Error(Nil)
   }
 }
 

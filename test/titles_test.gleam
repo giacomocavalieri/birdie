@@ -4,7 +4,6 @@ import glance
 import gleam/dict
 import gleam/list
 import gleam/string
-import gleeunit/should
 
 const module = "
 {{birdie_import}}
@@ -207,24 +206,27 @@ pub fn can_find_literal_titles_when_calling_aliased_discarded_module_test() {
 // }
 
 pub fn we_get_an_error_for_same_literal_titles_test() {
-  "
+  let duplicate_title_errors =
+    assert_error(
+      "
 import birdie
 pub fn wibble_test() {
   birdie.snap(title: \"wibble\", content: \"\")
   birdie.snap(title: \"wibble\", content: \"\")
-}
-    "
-  |> assert_error
-  |> should.equal(titles.DuplicateLiteralTitles(
-    title: "wibble",
-    one: titles.TestInfo(file: "my/module", test_name: "wibble_test"),
-    other: titles.TestInfo(file: "my/module", test_name: "wibble_test"),
-  ))
+}",
+    )
+
+  assert duplicate_title_errors
+    == titles.DuplicateLiteralTitles(
+      title: "wibble",
+      one: titles.TestInfo(file: "my/module", test_name: "wibble_test"),
+      other: titles.TestInfo(file: "my/module", test_name: "wibble_test"),
+    )
 }
 
 pub fn can_read_the_snap_titles_from_the_project_itself_test() {
-  titles.from_test_directory()
-  |> should.be_ok
-  |> pretty_titles
+  let assert Ok(titles) = titles.from_test_directory()
+
+  pretty_titles(titles)
   |> birdie.snap(title: "can read the snap titles from the project itself")
 }
