@@ -22,11 +22,11 @@ pub fn list_test() {
 }
 
 pub fn complex_function_test() {
-  "case foo(bar, baz) {
+  "case wibble(wobble, woo) {
   True ->
     io.println(\"Phew, we don't have to launch the missiles...\")
   False -> {
-    io.println(\"Not foo!\")
+    io.println(\"Not wibble!\")
     launch_missiles()
   }
 }"
