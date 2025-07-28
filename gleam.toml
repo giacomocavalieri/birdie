@@ -1,23 +1,24 @@
 name = "birdie"
-version = "1.3.1"
+version = "1.3.2"
 
 description = "🐦‍⬛ Snapshot testing in Gleam"
 licences = ["Apache-2.0"]
 repository = { type = "github", user = "giacomocavalieri", repo = "birdie" }
 target = "erlang"
 
+
 [dependencies]
-gleam_stdlib = ">= 0.43.0 and < 1.0.0"
-justin = ">= 1.0.1 and < 2.0.0"
-gleam_community_ansi = ">= 1.4.0 and < 2.0.0"
 argv = ">= 1.0.2 and < 2.0.0"
-rank = ">= 1.0.0 and < 2.0.0"
-glance = ">= 5.0.0 and < 6.0.0"
-filepath = ">= 1.1.0 and < 2.0.0"
-trie_again = ">= 1.1.2 and < 2.0.0"
-simplifile = ">= 2.2.0 and < 3.0.0"
 edit_distance = ">= 2.0.1 and < 3.0.0"
+filepath = ">= 1.1.0 and < 2.0.0"
+glance = ">= 5.0.0 and < 6.0.0"
+gleam_community_ansi = ">= 1.4.0 and < 2.0.0"
+gleam_stdlib = ">= 0.43.0 and < 2.0.0"
+justin = ">= 1.0.1 and < 2.0.0"
+rank = ">= 1.0.0 and < 2.0.0"
+simplifile = ">= 2.2.0 and < 3.0.0"
 term_size = ">= 1.0.1 and < 2.0.0"
+trie_again = ">= 1.1.2 and < 2.0.0"
 
 [dev-dependencies]
-gleeunit = ">= 1.2.0 and < 2.0.0"
+gleeunit = ">= 1.3.0 and < 2.0.0"

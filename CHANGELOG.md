@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.2 - 2025-06-28
+
+- Removed deprecated `gleam_stdlib` `int.digits` call.
+- Updated dependencies.
+
 ## 1.3.1 - 2025-05-30
 
 - Updated the `glance` dependency to `>= 5.0.0 and < 6.0.0`.

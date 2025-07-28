@@ -651,7 +651,7 @@ fn pretty_box(
   let width = terminal_width()
   let assert Ok(padding) = {
     let lines_count = list.length(content_lines) + 1
-    use digits <- result.try(int.digits(lines_count, 10))
+    use digits <- result.try(int_digits(lines_count, 10))
     Ok(list.length(digits) * 2 + 5)
   }
 
@@ -739,6 +739,23 @@ fn pretty_diff_line(
   }
 
   pretty_number <> separator <> pretty_line
+}
+
+// --- INT UTILITIES -----------------------------------------------------------
+
+// Verbatim copy from gleam_stdlib 0.62
+fn int_digits(x: Int, base: Int) -> Result(List(Int), Nil) {
+  case base < 2 {
+    True -> Error(Nil)
+    False -> Ok(int_digits_loop(x, base, []))
+  }
+}
+
+fn int_digits_loop(x: Int, base: Int, acc: List(Int)) -> List(Int) {
+  case int.absolute_value(x) < base {
+    True -> [x, ..acc]
+    False -> int_digits_loop(x / base, base, [x % base, ..acc])
+  }
 }
 
 // --- STRING UTILITIES --------------------------------------------------------
