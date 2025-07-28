@@ -641,6 +641,17 @@ fn regular_snapshot_box(
   )
 }
 
+fn count_digits(number: Int) -> Int {
+  count_digits_loop(int.absolute_value(number), 0)
+}
+
+fn count_digits_loop(number: Int, digits: Int) -> Int {
+  case number < 10 {
+    True -> 1 + digits
+    False -> count_digits_loop(number / 10, 1 + digits)
+  }
+}
+
 fn pretty_box(
   title: String,
   content_lines: List(DiffLine),
@@ -649,11 +660,8 @@ fn pretty_box(
   shared_line_style: fn(String) -> String,
 ) -> String {
   let width = terminal_width()
-  let assert Ok(padding) = {
-    let lines_count = list.length(content_lines) + 1
-    use digits <- result.try(int.digits(lines_count, 10))
-    Ok(list.length(digits) * 2 + 5)
-  }
+  let lines_count = list.length(content_lines) + 1
+  let padding = count_digits(lines_count) * 2 + 5
 
   // Make the title line.
   let title_length = string.length(title)
