@@ -83,7 +83,7 @@ so be careful when naming snapshots to not repeat the same title twice!
 My recommendation is strive to have small and cohesive snapshots. Each
 snapshot test should test one thing and one thing only. Having small snapshots
 will make your life way easier during the review process!
-It's better to review 10 small snpashots than a single huge one and you'll
+It's better to review 10 small snapshots than a single huge one and you'll
 see better, more focused diffs.
 
 ### Why is the snapshot content a `String`? I want to snapshot other things!
