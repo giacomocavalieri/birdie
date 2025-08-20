@@ -2,6 +2,7 @@ import argv
 import birdie/internal/diff.{type DiffLine, DiffLine}
 import birdie/internal/project
 import birdie/internal/titles
+import birdie/internal/version
 import edit_distance/levenshtein
 import filepath
 import gleam/bool
@@ -9,6 +10,7 @@ import gleam/int
 import gleam/io
 import gleam/list
 import gleam/option.{type Option, None, Some}
+import gleam/order
 import gleam/result
 import gleam/string
 import gleam_community/ansi
@@ -17,7 +19,7 @@ import rank
 import simplifile
 import term_size
 
-const birdie_version = "1.3.2"
+const birdie_version = "1.4.0"
 
 const birdie_snapshots_folder = "birdie_snapshots"
 
@@ -204,16 +206,23 @@ fn split_n(
 
 fn deserialise(raw: String) -> Result(Snapshot(a), Nil) {
   case split_n(raw, 4, "\n") {
-    Ok(#(["---", "version: " <> _, "title: " <> title, "---"], content))
-    | Ok(#(["---\r", "version: " <> _, "title: " <> title, "---\r"], content)) ->
-      Ok(Snapshot(title: string.trim(title), content:, info: None))
+    Ok(#(["---", "version: " <> version, "title: " <> title, "---"], content))
+    | Ok(#(
+        ["---\r", "version: " <> version, "title: " <> title, "---\r"],
+        content,
+      )) ->
+      Ok(Snapshot(
+        title: string.trim(title),
+        content: trim_content(content, based_on: version),
+        info: None,
+      ))
 
     Ok(_) | Error(_) ->
       case split_n(raw, 6, "\n") {
         Ok(#(
           [
             "---",
-            "version: " <> _,
+            "version: " <> version,
             "title: " <> title,
             "file: " <> file,
             "test_name: " <> test_name,
@@ -224,7 +233,7 @@ fn deserialise(raw: String) -> Result(Snapshot(a), Nil) {
         | Ok(#(
             [
               "---\r",
-              "version: " <> _,
+              "version: " <> version,
               "title: " <> title,
               "file: " <> file,
               "test_name: " <> test_name,
@@ -234,14 +243,34 @@ fn deserialise(raw: String) -> Result(Snapshot(a), Nil) {
           )) ->
           Ok(Snapshot(
             title: string.trim(title),
-            content:,
+            content: trim_content(content, based_on: version),
             info: Some(titles.TestInfo(
               file: string.trim(file),
               test_name: string.trim(test_name),
             )),
           ))
+
         Ok(_) | Error(_) -> Error(Nil)
       }
+  }
+}
+
+/// Birdie started adding newlines to the end of files starting from `1.4.0`,
+/// so if we're reading a snapshot created from `1.4.0` onwards then we want to
+/// make sure to remove that newline!
+///
+fn trim_content(content: String, based_on version: String) -> String {
+  let assert Ok(version) = version.parse(version) as "corrupt birdie version"
+  case version.compare(version, version.new(1, 4, 0)) {
+    order.Gt | order.Eq -> trim_end_once(content, "\n")
+    order.Lt -> content
+  }
+}
+
+fn trim_end_once(string: String, substring: String) {
+  case string.ends_with(string, substring) {
+    True -> string.drop_end(string, string.length(substring))
+    False -> string
   }
 }
 
@@ -270,6 +299,9 @@ fn serialise(snapshot: Snapshot(New)) -> String {
   ]
   |> list.flatten
   |> string.join(with: "\n")
+  // We always add a newline at the end of each snapshot to make sure they're
+  // valid files.
+  |> string.append("\n")
 }
 
 // --- FILE SYSTEM OPERATIONS --------------------------------------------------

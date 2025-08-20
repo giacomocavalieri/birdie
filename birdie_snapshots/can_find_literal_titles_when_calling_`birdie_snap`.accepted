@@ -1,5 +1,5 @@
 ---
-version: 1.2.5
+version: 1.4.0
 title: can find literal titles when calling `birdie.snap`
 file: ./test/titles_test.gleam
 test_name: can_find_literal_titles_when_calling_birdie_snap_test
@@ -18,3 +18,4 @@ without function capture and labelled content [in_pipeline_with_piped_title - my
 without label                            [in_pipeline_with_piped_content - my/module]
 
 --- PREFIXES ---
+

@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Birdie will generate valid snapshot files by adding an empty line at the end
+  of each.
+
 ## 1.3.2 - 2025-07-28
 
 - Stop using deprecated `int.digits` from `gleam_stdlib`.
