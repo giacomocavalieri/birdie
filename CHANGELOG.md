@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.4.0 - 2025-08-20
 
 - Birdie will generate valid snapshot files by adding an empty line at the end
   of each.
