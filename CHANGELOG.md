@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.1 - 2025-09-28
+
+- Updated the `edit_distance` dependency to `>= 3.0.0 and < 4.0.0`.
+
 ## 1.4.0 - 2025-08-20
 
 - Birdie will generate valid snapshot files by adding an empty line at the end
