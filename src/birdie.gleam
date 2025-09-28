@@ -3,7 +3,7 @@ import birdie/internal/diff.{type DiffLine, DiffLine}
 import birdie/internal/project
 import birdie/internal/titles
 import birdie/internal/version
-import edit_distance/levenshtein
+import edit_distance
 import filepath
 import gleam/bool
 import gleam/int
@@ -920,11 +920,17 @@ fn suggest_run_command(invalid: String, command: Command) -> Nil {
 }
 
 fn closest_command(to string: String) -> Result(Command, Nil) {
-  let distance = fn(c) { command_to_string(c) |> levenshtein.distance(string) }
-
   [Review, AcceptAll, RejectAll, Help]
-  |> list.map(fn(command) { #(command, distance(command)) })
-  |> list.filter(keeping: fn(command) { command.1 <= 3 })
+  |> list.filter_map(fn(command) {
+    let distance =
+      command_to_string(command)
+      |> edit_distance.levenshtein(string)
+
+    case distance {
+      0 | 1 | 2 | 3 -> Ok(#(command, distance))
+      _ -> Error(Nil)
+    }
+  })
   |> list.sort(fn(one, other) { int.compare(one.1, other.1) })
   |> list.first
   |> result.map(fn(pair) { pair.0 })
