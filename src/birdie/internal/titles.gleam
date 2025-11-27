@@ -238,7 +238,7 @@ fn snap_call(
       function:,
       arguments: [
         glance.UnlabelledField(title),
-        glance.LabelledField("content", _snapshot_content),
+        glance.LabelledField("content", _location, _snapshot_content),
       ],
     )
     | // A direct function call to the `birdie.snap` function where the first
@@ -257,7 +257,7 @@ fn snap_call(
         function:,
         arguments: [
           glance.UnlabelledField(_snapshot_content),
-          glance.LabelledField("title", title),
+          glance.LabelledField("title", _location, title),
         ],
       )
     | // A direct function call to the `birdie.snap` function where the first
@@ -267,7 +267,7 @@ fn snap_call(
         location: _,
         function:,
         arguments: [
-          glance.LabelledField("content", _snapshot_content),
+          glance.LabelledField("content", _location, _snapshot_content),
           glance.UnlabelledField(title),
         ],
       )
@@ -275,8 +275,8 @@ fn snap_call(
         location: _,
         function:,
         arguments: [
-          glance.LabelledField("content", _snapshot_content),
-          glance.LabelledField("title", title),
+          glance.LabelledField("content", _location, _snapshot_content),
+          glance.LabelledField("title", _location, title),
         ],
       )
     | // A direct function call to the `birdie.snap` function where the first
@@ -284,7 +284,10 @@ fn snap_call(
       glance.Call(
         location: _,
         function:,
-        arguments: [glance.LabelledField("title", title), _content_field],
+        arguments: [
+          glance.LabelledField("title", _location, title),
+          _content_field,
+        ],
       )
     | // A call to the `birdie.snap` function where the title is piped into it
       // and the content is passed as a labelled argument.
@@ -295,7 +298,9 @@ fn snap_call(
         right: glance.Call(
           location: _,
           function:,
-          arguments: [glance.LabelledField("content", _snapshot_content)],
+          arguments: [
+            glance.LabelledField("content", _location, _snapshot_content),
+          ],
         ),
       )
     | // A call to the `birdie.snap` function where the content is piped into
@@ -317,7 +322,7 @@ fn snap_call(
         right: glance.Call(
           location: _,
           function:,
-          arguments: [glance.LabelledField("title", title)],
+          arguments: [glance.LabelledField("title", _location, title)],
         ),
       )
     | // We pipe into `title: _`, since we're using a label we don't have to
@@ -440,11 +445,11 @@ fn try_fold_expression(
     | glance.Variable(_, _)
     | glance.Panic(_, _)
     | glance.Todo(_, _)
-    | glance.Echo(_, None) -> Ok(acc)
+    | glance.Echo(_, None, _) -> Ok(acc)
 
     glance.NegateInt(_location, expression)
     | glance.NegateBool(_location, expression)
-    | glance.Echo(_location, Some(expression))
+    | glance.Echo(_location, Some(expression), _message)
     | glance.FieldAccess(location: _, container: expression, label: _)
     | glance.TupleIndex(location: _, tuple: expression, index: _) ->
       try_fold_expression(expression, acc, fun)
@@ -527,9 +532,9 @@ fn try_fold_fields(
 ) -> Result(a, b) {
   use acc, field <- list.try_fold(over: fields, from: acc)
   case field {
-    glance.LabelledField(label: _, item:) | glance.UnlabelledField(item:) ->
-      try_fold_expression(item, acc, fun)
-    glance.ShorthandField(label: _) -> Ok(acc)
+    glance.LabelledField(label: _, label_location: _, item:)
+    | glance.UnlabelledField(item:) -> try_fold_expression(item, acc, fun)
+    glance.ShorthandField(label: _, location: _) -> Ok(acc)
   }
 }
 
