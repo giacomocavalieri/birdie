@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.0 - 2025-12-10
+
+- The CLI has been improved with better error messages and a nicer overall look.
+
 ## 1.4.1 - 2025-09-28
 
 - Updated the `edit_distance` dependency to `>= 3.0.0 and < 4.0.0`.

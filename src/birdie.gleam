@@ -1,9 +1,11 @@
 import argv
+import birdie/internal/cli.{
+  type Command, Help, UnknownCommand, UnknownOption, UnknownSubcommand,
+}
 import birdie/internal/diff.{type DiffLine, DiffLine}
 import birdie/internal/project
 import birdie/internal/titles
 import birdie/internal/version
-import edit_distance
 import filepath
 import gleam/int
 import gleam/io
@@ -843,32 +845,6 @@ fn do_to_lines(
 
 // --- CLI COMMAND -------------------------------------------------------------
 
-type Command {
-  Review
-  AcceptAll
-  RejectAll
-  Help
-}
-
-fn command_to_string(command: Command) -> String {
-  case command {
-    Review -> "review"
-    AcceptAll -> "accept-all"
-    RejectAll -> "reject-all"
-    Help -> "help"
-  }
-}
-
-fn parse_command(arguments: List(String)) -> Result(Command, Nil) {
-  case arguments {
-    [] | ["review"] -> Ok(Review)
-    ["accept-all"] | ["accept", "all"] -> Ok(AcceptAll)
-    ["reject-all"] | ["reject", "all"] -> Ok(RejectAll)
-    ["help"] -> Ok(Help)
-    _ -> Error(Nil)
-  }
-}
-
 /// Reviews the snapshots in the project's folder.
 /// This function will behave differently depending on the command line
 /// arguments provided to the program.
@@ -883,65 +859,81 @@ fn parse_command(arguments: List(String)) -> Result(Command, Nil) {
 /// > and checked with the vcs you're using.
 ///
 pub fn main() -> Nil {
-  let args = argv.load().arguments
-  case parse_command(args) {
+  parse_and_run(argv.load().arguments)
+}
+
+fn parse_and_run(args: List(String)) {
+  case cli.parse(args) {
     Ok(command) -> run_command(command)
-    Error(_) ->
-      case args {
-        [subcommand] ->
-          case closest_command(subcommand) {
-            Ok(command) -> suggest_run_command(subcommand, command)
-            Error(Nil) -> unexpected_subcommand(subcommand)
+
+    Error(UnknownOption(command:, option:)) -> {
+      cli.unknown_option_error(birdie_version, command, option)
+      |> io.println
+      exit(1)
+    }
+    Error(UnknownSubcommand(command:, subcommand:)) -> {
+      cli.unknown_subcommand_error(birdie_version, command, subcommand)
+      |> io.println
+      exit(1)
+    }
+    Error(UnknownCommand(command:)) ->
+      case cli.similar_command(to: command) {
+        Error(Nil) -> {
+          cli.unknown_command_error(birdie_version, command, True)
+          |> io.println
+          exit(1)
+        }
+
+        Ok(new_command) -> {
+          cli.unknown_command_error(birdie_version, command, False)
+          |> io.println
+
+          let prompt =
+            "I think you misspelled `"
+            <> new_command
+            <> "`, would you like me to run it instead?"
+
+          case ask_yes_or_no(prompt) {
+            No -> {
+              { "\n" <> cli.help_text(birdie_version, for: None) }
+              |> io.println
+              exit(1)
+            }
+            Yes ->
+              replace_first(command, with: new_command, in: args)
+              |> parse_and_run
           }
-        subcommands -> more_than_one_command(subcommands)
+        }
       }
   }
+}
+
+fn ask_yes_or_no(prompt: String) -> Answer {
+  case get_line(prompt <> " [Y/n] ") {
+    Error(_) -> No
+    Ok(line) ->
+      case string.lowercase(line) |> string.trim {
+        "yes" | "y" | "" -> Yes
+        _ -> No
+      }
+  }
+}
+
+type Answer {
+  Yes
+  No
 }
 
 fn run_command(command: Command) -> Nil {
   case command {
-    Review -> report_status(review())
-    AcceptAll -> report_status(accept_all())
-    RejectAll -> report_status(reject_all())
-    Help -> help()
-  }
-}
-
-fn suggest_run_command(invalid: String, command: Command) -> Nil {
-  let error_message =
-    ansi.bold("Error: ") <> "\"" <> invalid <> "\" isn't a valid subcommand."
-
-  io.println(ansi.red(error_message))
-  let msg =
-    "I think you misspelled `"
-    <> command_to_string(command)
-    <> "`, would you like me to run it instead? [Y/n] "
-
-  case get_line(msg) {
-    Error(_) -> Nil
-    Ok(line) ->
-      case string.lowercase(line) |> string.trim {
-        "yes" | "y" | "" -> run_command(command)
-        _ -> io.println("\n" <> help_text())
-      }
-  }
-}
-
-fn closest_command(to string: String) -> Result(Command, Nil) {
-  [Review, AcceptAll, RejectAll, Help]
-  |> list.filter_map(fn(command) {
-    let distance =
-      command_to_string(command)
-      |> edit_distance.levenshtein(string)
-
-    case distance {
-      0 | 1 | 2 | 3 -> Ok(#(command, distance))
-      _ -> Error(Nil)
+    cli.Review -> report_status(review())
+    cli.Accept -> report_status(accept_all())
+    cli.Reject -> report_status(reject_all())
+    Help(command) -> {
+      cli.help_text(birdie_version, for: command)
+      |> io.println
     }
-  })
-  |> list.sort(fn(one, other) { int.compare(one.1, other.1) })
-  |> list.first
-  |> result.map(fn(pair) { pair.0 })
+  }
 }
 
 fn review() -> Result(Nil, Error) {
@@ -1193,45 +1185,10 @@ fn reject_all() -> Result(Nil, Error) {
   list.try_each(new_snapshots, reject_snapshot)
 }
 
-fn help() -> Nil {
-  let version = ansi.green("🐦‍⬛ birdie ") <> "v" <> birdie_version
-  io.println(version <> "\n\n" <> help_text())
-}
-
-fn help_text() -> String {
-  ansi.yellow("USAGE:\n")
-  <> "  gleam run -m birdie [ <SUBCOMMAND> ]\n\n"
-  <> ansi.yellow("SUBCOMMANDS:\n")
-  <> ansi.green("  review       ")
-  <> "Review all new snapshots one by one\n"
-  <> ansi.green("  accept-all   ")
-  <> "Accept all new snapshots\n"
-  <> ansi.green("  reject-all   ")
-  <> "Reject all new snapshots\n"
-  <> ansi.green("  help         ")
-  <> "Show this help text\n"
-}
-
-fn unexpected_subcommand(subcommand: String) -> Nil {
-  let error_message =
-    ansi.bold("Error: ") <> "\"" <> subcommand <> "\" isn't a valid subcommand."
-
-  io.println(ansi.red(error_message) <> "\n\n" <> help_text())
-}
-
-fn more_than_one_command(subcommands: List(String)) -> Nil {
-  let error_message =
-    ansi.bold("Error: ")
-    <> "I can only run one subcommand at a time, but more than one were provided: "
-    <> string.join(list.map(subcommands, fn(s) { "\"" <> s <> "\"" }), ", ")
-
-  io.println(ansi.red(error_message) <> "\n\n" <> help_text())
-}
-
 fn report_status(result: Result(Nil, Error)) -> Nil {
   case result {
     Ok(Nil) -> io.println(ansi.green("🐦‍⬛ Done!"))
-    Error(error) -> io.println_error("❌ " <> explain(error))
+    Error(error) -> io.println_error(ansi.red("Error: ") <> explain(error))
   }
 }
 
@@ -1242,7 +1199,18 @@ fn terminal_width() -> Int {
   }
 }
 
-// --- FFI ---------------------------------------------------------------------
+// --- HELPERS -----------------------------------------------------------------
+
+/// Replaces the first occurrence of an element in the list with the given
+/// replacement.
+///
+fn replace_first(in list: List(a), item item: a, with replacement: a) -> List(a) {
+  case list {
+    [] -> []
+    [first, ..rest] if first == item -> [replacement, ..rest]
+    [first, ..rest] -> [first, ..replace_first(rest, item, replacement)]
+  }
+}
 
 /// Clear the screen.
 ///
@@ -1262,6 +1230,11 @@ fn cursor_up(n: Int) -> Nil {
 fn clear_line() -> Nil {
   io.print("\u{1b}[2K")
 }
+
+// --- FFI ---------------------------------------------------------------------
+
+@external(erlang, "erlang", "halt")
+fn exit(status_code: Int) -> Nil
 
 /// Reads a line from standard input with the given prompt.
 ///
