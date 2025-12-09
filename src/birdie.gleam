@@ -5,7 +5,6 @@ import birdie/internal/titles
 import birdie/internal/version
 import edit_distance
 import filepath
-import gleam/bool
 import gleam/int
 import gleam/io
 import gleam/list
@@ -159,13 +158,22 @@ fn do_snap(content: String, title: String) -> Result(Outcome, Error) {
 
     // If there's a corresponding accepted snapshot we compare it with the new
     // one.
-    Some(accepted) -> {
-      // If the new snapshot is the same as the old one then there's no need to
-      // save it in a `.new` file: we can just say they are the same.
-      use <- bool.guard(when: accepted.content == new.content, return: Ok(Same))
-      use _ <- result.try(save(new, to: new_snapshot_path))
-      Ok(Different(accepted, new))
-    }
+    Some(accepted) ->
+      case accepted.content == new.content {
+        True -> {
+          // If the file is ok we make sure to delete any lingering `.new` file
+          // that might have been leftover from somewhere else.
+          let _ = simplifile.delete(new_snapshot_path)
+          Ok(Same)
+        }
+
+        False -> {
+          // If the new snapshot is the same as the old one then there's no need
+          // to save it in a `.new` file: we can just say they are the same.
+          use _ <- result.try(save(new, to: new_snapshot_path))
+          Ok(Different(accepted, new))
+        }
+      }
   }
 }
 
