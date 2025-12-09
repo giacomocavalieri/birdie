@@ -8,17 +8,17 @@ pub fn main() {
 
 pub fn hello_birdie_test() {
   "🐦‍⬛ smile for the birdie!"
-  |> birdie.snap(title: "my first snapshot")
+  |> birdie.snap(title: "hello birdie test")
 }
 
 pub fn a_result_test() {
   string.inspect(Ok(11))
-  |> birdie.snap(title: "my favourite number wrapped in a result")
+  |> birdie.snap(title: "a result test")
 }
 
 pub fn list_test() {
   "[ 1, 2, 3, 4 ]"
-  |> birdie.snap(title: "snapping a list of numbers")
+  |> birdie.snap(title: "list test")
 }
 
 pub fn complex_function_test() {
@@ -30,5 +30,5 @@ pub fn complex_function_test() {
     launch_missiles()
   }
 }"
-  |> birdie.snap(title: "diffing a case expression")
+  |> birdie.snap(title: "complex function test")
 }

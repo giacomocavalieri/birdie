@@ -11,8 +11,14 @@ pub type Command {
   Accept
   Reject
   Help
+  Stale(subcommand: StaleSubcommand)
 
   WithHelpOption(command: Command, explained: Explained)
+}
+
+pub type StaleSubcommand {
+  CheckStale
+  DeleteStale
 }
 
 pub type Explained {
@@ -30,7 +36,9 @@ pub type Explained {
 pub type Error {
   UnknownCommand(command: String)
   UnknownSubcommand(command: Command, subcommand: String)
+  UnexpectedArgument(command: Command, argument: String)
   UnknownOption(command: Command, option: String)
+  MissingSubcommand(command: Command)
 }
 
 pub fn parse(args: List(String)) -> Result(Command, Error) {
@@ -57,6 +65,16 @@ pub fn parse(args: List(String)) -> Result(Command, Error) {
     ["accept", subcommand, ..] ->
       Error(UnknownSubcommand(command: Accept, subcommand:))
 
+    ["stale"] -> Stale(CheckStale) |> require_help(options)
+    ["stale", "check"] -> Stale(CheckStale) |> or_help(options)
+    ["stale", "check", argument, ..] ->
+      Error(UnexpectedArgument(command: Stale(CheckStale), argument:))
+    ["stale", "delete"] -> Stale(DeleteStale) |> or_help(options)
+    ["stale", "delete", argument, ..] ->
+      Error(UnexpectedArgument(command: Stale(DeleteStale), argument:))
+    ["stale", subcommand, ..] ->
+      Error(UnknownSubcommand(command: Stale(CheckStale), subcommand:))
+
     ["help", ..] -> Ok(Help)
 
     [command, ..] -> Error(UnknownCommand(command:))
@@ -70,6 +88,20 @@ fn or_help(command: Command, options: List(String)) -> Result(Command, Error) {
       case list.any(options, is_help) {
         True -> Ok(WithHelpOption(command, explained: FullCommand))
         False -> Ok(command)
+      }
+  }
+}
+
+fn require_help(
+  command: Command,
+  options: List(String),
+) -> Result(Command, Error) {
+  case list.find(options, one_that: fn(option) { !is_help(option) }) {
+    Ok(option) -> Error(UnknownOption(command:, option:))
+    Error(_) ->
+      case list.any(options, is_help) {
+        True -> Ok(WithHelpOption(command, explained: TopLevelCommand))
+        False -> Error(MissingSubcommand(command:))
       }
   }
 }
@@ -97,7 +129,7 @@ pub fn similar_command(to command: String) -> Result(String, Nil) {
 }
 
 pub fn all_commands() -> List(String) {
-  ["accept", "help", "reject", "review"]
+  ["accept", "help", "reject", "review", "stale"]
 }
 
 // ERROR MESSAGES --------------------------------------------------------------
@@ -136,6 +168,39 @@ pub fn unknown_option_error(
   <> help_text(birdie_version, for: command, explaining: FullCommand)
 }
 
+pub fn missing_subcommand_error(
+  birdie_version: String,
+  command: Command,
+) -> String {
+  ansi.red("Error: ")
+  <> style_invalid_value(command_to_string(command))
+  <> " is missing a required subcommand\n\n"
+  <> help_text(birdie_version, for: command, explaining: TopLevelCommand)
+}
+
+pub fn unexpected_argument_error(
+  birdie_version: String,
+  command: Command,
+  argument: String,
+) -> String {
+  ansi.red("Error: ")
+  <> " unexpected argument "
+  <> style_invalid_value(argument)
+  <> "\n\n"
+  <> help_text(birdie_version, command, explaining: FullCommand)
+}
+
+fn command_to_string(command: Command) {
+  case command {
+    WithHelpOption(command:, ..) -> command_to_string(command)
+    Stale(..) -> "stale"
+    Review -> "review"
+    Accept -> "accept"
+    Reject -> "reject"
+    Help -> "help"
+  }
+}
+
 fn style_invalid_value(value: String) -> String {
   ansi.yellow("'" <> value <> "'")
 }
@@ -157,10 +222,49 @@ pub fn help_text(
     Reject, _ -> reject_help_text()
     Review, _ -> review_help_text()
 
+    Stale(subcommand), FullCommand -> stale_help_text(Some(subcommand))
+    Stale(_), TopLevelCommand -> stale_help_text(None)
+
     // This would only happen if we wrapped a `WithHelpOption` command in one
     // other. Just for the sake of safety I return a value instead of panicking.
     WithHelpOption(command:, explained:), _ ->
       help_text(birdie_version, command, explained)
+  }
+}
+
+fn stale_help_text(subcommand: Option(StaleSubcommand)) -> String {
+  case subcommand {
+    None -> {
+      let stale_subcommands =
+        ansi.yellow("Subcommands:\n")
+        <> ansi.green("  check   ")
+        <> "check if there's any stale snapshot\n"
+        <> ansi.green("  delete  ")
+        <> "delete all stale snapshots"
+
+      usage(["stale"], Some(Subcommand))
+      <> "\n\n"
+      <> "Find and remove stale snapshots."
+      <> "\n\n"
+      <> stale_subcommands
+      <> "\n\n"
+      <> options()
+    }
+
+    Some(CheckStale) ->
+      usage(["stale", "check"], None)
+      <> "\n\n"
+      <> "Check if there's any snapshot that is no longer used by any test.\n"
+      <> "This exits with an error status code if any stale snapshot is found."
+      <> "\n\n"
+      <> options()
+
+    Some(DeleteStale) ->
+      usage(["stale", "delete"], None)
+      <> "\n\n"
+      <> "Removes any snapshot that is no longer used by any test."
+      <> "\n\n"
+      <> options()
   }
 }
 
@@ -194,19 +298,21 @@ fn help_help_text(birdie_version: String) -> String {
   <> main_help_text()
 }
 
-fn main_help_text() -> String {
+pub fn main_help_text() -> String {
   usage([], Some(Command)) <> "\n\n" <> command_menu() <> "\n\n" <> options()
 }
 
 fn command_menu() -> String {
   ansi.yellow("Commands:\n")
-  <> ansi.green("  review   ")
+  <> ansi.green("  review  ")
   <> "review all new snapshots one by one\n"
-  <> ansi.green("  accept   ")
+  <> ansi.green("  accept  ")
   <> "accept all new snapshots\n"
-  <> ansi.green("  reject   ")
+  <> ansi.green("  reject  ")
   <> "reject all new snapshots\n"
-  <> ansi.green("  help     ")
+  <> ansi.green("  stale   ")
+  <> "find and remove stale snapshots\n"
+  <> ansi.green("  help    ")
   <> "print this help text"
 }
 
@@ -239,5 +345,5 @@ fn usage(
 
 fn options() -> String {
   let help_option = ansi.green("-h") <> ", " <> ansi.green("--help")
-  ansi.yellow("Options:") <> "\n  " <> help_option <> "   print this help text"
+  ansi.yellow("Options:") <> "\n  " <> help_option <> "  print this help text"
 }

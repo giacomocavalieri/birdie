@@ -1,7 +1,9 @@
 import birdie/internal/cli.{
-  type Command, Accept, FullCommand, Help, Reject, Review, UnknownCommand,
+  type Command, Accept, CheckStale, DeleteStale, FullCommand, Help, Reject,
+  Review, Stale, TopLevelCommand, UnexpectedArgument, UnknownCommand,
   UnknownOption, UnknownSubcommand, WithHelpOption,
 }
+
 import gleam/list
 import gleam/string
 
@@ -66,6 +68,42 @@ pub fn parse_reject_test() {
     == cli.parse(["reject", "--wibble"])
 }
 
+pub fn parse_stale_test() {
+  let assert Ok(WithHelpOption(Stale(_), TopLevelCommand)) =
+    cli.parse(["stale", "--help"])
+  let assert Ok(WithHelpOption(Stale(_), TopLevelCommand)) =
+    cli.parse(["stale", "-h"])
+
+  assert Ok(Stale(CheckStale)) == cli.parse(["stale", "check"])
+  assert Ok(WithHelpOption(Stale(CheckStale), FullCommand))
+    == cli.parse(["stale", "check", "--help"])
+
+  assert Ok(Stale(DeleteStale)) == cli.parse(["stale", "delete"])
+  assert Ok(WithHelpOption(Stale(DeleteStale), FullCommand))
+    == cli.parse(["stale", "delete", "--help"])
+
+  // Unknown subcommands and options
+  let assert Error(UnknownSubcommand(Stale(_), "wibble")) =
+    cli.parse(["stale", "wibble"])
+
+  assert Error(UnexpectedArgument(Stale(CheckStale), "wibble"))
+    == cli.parse(["stale", "check", "wibble"])
+  assert Error(UnexpectedArgument(Stale(DeleteStale), "wibble"))
+    == cli.parse(["stale", "delete", "wibble"])
+
+  let assert Error(UnknownOption(Stale(_), "-w")) = cli.parse(["stale", "-w"])
+  let assert Error(UnknownOption(Stale(_), "--wibble")) =
+    cli.parse(["stale", "--wibble"])
+  assert Error(UnknownOption(Stale(CheckStale), "-w"))
+    == cli.parse(["stale", "check", "-w"])
+  assert Error(UnknownOption(Stale(CheckStale), "--wibble"))
+    == cli.parse(["stale", "check", "--wibble"])
+  assert Error(UnknownOption(Stale(DeleteStale), "-w"))
+    == cli.parse(["stale", "delete", "-w"])
+  assert Error(UnknownOption(Stale(DeleteStale), "--wibble"))
+    == cli.parse(["stale", "delete", "--wibble"])
+}
+
 pub fn parse_help_test() {
   // Explicitly using the review command
   assert Ok(Help) == cli.parse(["help"])
@@ -82,7 +120,8 @@ fn all_known_commands(all: List(Command)) -> List(String) {
     [] -> all_known_commands([Accept, ..all])
     [Accept, ..] -> all_known_commands([Help, ..all])
     [Help, ..] -> all_known_commands([Reject, ..all])
-    [Reject, ..] -> all_known_commands([Review, ..all])
+    [Reject, ..] -> all_known_commands([Stale(CheckStale), ..all])
+    [Stale(_), ..] -> all_known_commands([Review, ..all])
     [Review, ..] ->
       list.map(all, command_to_string)
       |> list.sort(string.compare)
@@ -94,9 +133,10 @@ fn all_known_commands(all: List(Command)) -> List(String) {
 fn command_to_string(command: Command) {
   case command {
     Accept -> "accept"
-    Help(..) -> "help"
+    Help -> "help"
     Reject -> "reject"
     Review -> "review"
+    Stale(_) -> "stale"
     WithHelpOption(..) -> panic as "this command is never suggested"
   }
 }

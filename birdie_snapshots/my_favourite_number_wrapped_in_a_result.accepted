@@ -1,7 +1,0 @@
----
-version: 1.2.5
-title: my favourite number wrapped in a result
-file: ./test/birdie_test.gleam
-test_name: a_result_test
----
-Ok(11)

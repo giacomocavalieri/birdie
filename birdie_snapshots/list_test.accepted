@@ -1,0 +1,7 @@
+---
+version: 1.4.1
+title: list test
+file: ./test/birdie_test.gleam
+test_name: list_test
+---
+[ 1, 2, 3, 4 ]

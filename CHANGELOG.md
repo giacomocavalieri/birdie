@@ -1,8 +1,16 @@
 # Changelog
 
-## 1.5.0 - 2025-12-10
+## 1.5.0 - unreleased
 
 - The CLI has been improved with better error messages and a nicer overall look.
+- Birdie now has better tooling to deal with stale snapshots. A stale snapshot
+  is a snapshot that is no longer referenced by any snapshot test and so it
+  could be safely removed.
+  It's easy to end up having stale snapshots, especially when changin the name
+  of a snapshot and forgetting to remove the olde one.
+  The new `stale` command allows to:
+  - `gleam run -m stale check` to check if there's any stale snapshot
+  - `gleam run -m stale delete` to remove any stale snapshot
 
 ## 1.4.1 - 2025-09-28
 

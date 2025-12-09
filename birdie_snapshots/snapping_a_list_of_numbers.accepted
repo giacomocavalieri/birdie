@@ -1,7 +1,0 @@
----
-version: 1.2.5
-title: snapping a list of numbers
-file: ./test/birdie_test.gleam
-test_name: list_test
----
-[ 1, 2, 3, 4 ]

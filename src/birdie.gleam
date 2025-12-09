@@ -1,8 +1,11 @@
 import argv
 import birdie/internal/cli.{
-  type Command, Accept, FullCommand, Help, Reject, Review, UnknownCommand,
+  type Command, Accept, CheckStale, DeleteStale, FullCommand, Help,
+  MissingSubcommand, Reject, Review, Stale, UnexpectedArgument, UnknownCommand,
   UnknownOption, UnknownSubcommand, WithHelpOption,
 }
+import envoy
+
 import birdie/internal/diff.{type DiffLine, DiffLine}
 import birdie/internal/project
 import birdie/internal/titles
@@ -14,16 +17,16 @@ import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/order
 import gleam/result
+import gleam/set
 import gleam/string
 import gleam_community/ansi
+import global_value
 import justin
 import rank
-import simplifile
+import simplifile.{Eexist, Enoent}
 import term_size
 
 const birdie_version = "1.4.1"
-
-const birdie_snapshots_folder = "birdie_snapshots"
 
 const hint_review_message = "run `gleam run -m birdie` to review the snapshots"
 
@@ -58,6 +61,18 @@ type Error {
 
   CannotFindProjectRoot(reason: simplifile.FileError)
 
+  CannotCreateReferencedFile(reason: simplifile.FileError)
+
+  CannotReadReferencedFile(reason: simplifile.FileError)
+
+  CannotMarkSnapshotAsReferenced(reason: simplifile.FileError)
+
+  StaleSnapshotsFound(stale_snapshots: List(String))
+
+  CannotDeleteStaleSnapshot(reason: simplifile.FileError)
+
+  MissingReferencedFile
+
   CannotGetTitles(reason: titles.Error)
 }
 
@@ -72,6 +87,61 @@ type Snapshot(status) {
 }
 
 // --- SNAP --------------------------------------------------------------------
+
+/// Returns the path to the referenced file, initialising it to be empty only
+/// the first time this function is called.
+///
+fn global_referenced_file() -> Result(String, Error) {
+  use <- global_value.create_with_unique_name("birdie.referenced_file")
+  let referenced_file = referenced_file_path()
+  case simplifile.create_file(referenced_file) {
+    Ok(_) -> Ok(referenced_file)
+    Error(Eexist) ->
+      simplifile.write("", to: referenced_file)
+      |> result.replace(referenced_file)
+      |> result.map_error(CannotCreateReferencedFile(reason: _))
+    Error(reason) -> Error(CannotCreateReferencedFile(reason:))
+  }
+}
+
+fn referenced_file_path() -> String {
+  filepath.join(get_temp_directory(), "referenced.txt")
+}
+
+fn get_temp_directory() -> String {
+  let temp = {
+    use <- result.lazy_or(envoy.get("TMPDIR"))
+    use <- result.lazy_or(envoy.get("TEMP"))
+    envoy.get("TMP")
+  }
+
+  case temp {
+    Ok(temp) -> temp
+    Error(_) ->
+      case is_windows() {
+        True -> "C:\\TMP"
+        False -> "/tmp"
+      }
+  }
+}
+
+@external(erlang, "birdie_ffi", "is_windows")
+fn is_windows() -> Bool
+
+/// Finds the snapshots folder at the root of the project the command is run
+/// into. If it's not present the folder is created automatically.
+///
+fn snapshot_folder() -> Result(String, Error) {
+  use <- global_value.create_with_unique_name("birdie.snapshot_folder")
+  let result = result.map_error(project.find_root(), CannotFindProjectRoot)
+  use project_root <- result.try(result)
+  let snapshots_folder = filepath.join(project_root, "birdie_snapshots")
+
+  case simplifile.create_directory(snapshots_folder) {
+    Ok(Nil) | Error(Eexist) -> Ok(snapshots_folder)
+    Error(error) -> Error(CannotCreateSnapshotsFolder(error))
+  }
+}
 
 /// Performs a snapshot test with the given title, saving the content to a new
 /// snapshot file. All your snapshots will be stored in a folder called
@@ -131,7 +201,7 @@ fn do_snap(content: String, title: String) -> Result(Outcome, Error) {
 
   // We have to find the snapshot folder since the `gleam test` command might
   // be run from any subfolder we can't just assume we're in the project's root.
-  use folder <- result.try(find_snapshots_folder())
+  use folder <- result.try(snapshot_folder())
 
   // 🚨 When snapping with the `snap` function we don't try and get the test
   // info from the file it's defined in. That would require re-parsing the test
@@ -161,7 +231,19 @@ fn do_snap(content: String, title: String) -> Result(Outcome, Error) {
 
     // If there's a corresponding accepted snapshot we compare it with the new
     // one.
-    Some(accepted) ->
+    Some(accepted) -> {
+      // Whenever we find an existing accepted snapshot file, we record that it
+      // has been referenced in the current run. So we know it will not be
+      // stale!
+      use referenced_file <- result.try(global_referenced_file())
+      use _ <- result.try(
+        simplifile.append(
+          filepath.base_name(accepted_snapshot_path) <> "\n",
+          to: referenced_file,
+        )
+        |> result.map_error(CannotMarkSnapshotAsReferenced),
+      )
+
       case accepted.content == new.content {
         True -> {
           // If the file is ok we make sure to delete any lingering `.new` file
@@ -177,6 +259,7 @@ fn do_snap(content: String, title: String) -> Result(Outcome, Error) {
           Ok(Different(accepted, new))
         }
       }
+    }
   }
 }
 
@@ -347,7 +430,7 @@ fn read_accepted(source: String) -> Result(Option(Snapshot(Accepted)), Error) {
         Error(Nil) -> Error(CorruptedSnapshot(source))
       }
 
-    Error(simplifile.Enoent) -> Ok(None)
+    Error(Enoent) -> Ok(None)
     Error(reason) -> Error(CannotReadAcceptedSnapshot(reason:, source:))
   }
 }
@@ -407,20 +490,6 @@ fn list_accepted_snapshots(in folder: String) -> Result(List(String), Error) {
   }
 }
 
-/// Finds the snapshots folder at the root of the project the command is run
-/// into. If it's not present the folder is created automatically.
-///
-fn find_snapshots_folder() -> Result(String, Error) {
-  let result = result.map_error(project.find_root(), CannotFindProjectRoot)
-  use project_root <- result.try(result)
-  let snapshots_folder = filepath.join(project_root, birdie_snapshots_folder)
-
-  case simplifile.create_directory(snapshots_folder) {
-    Ok(Nil) | Error(simplifile.Eexist) -> Ok(snapshots_folder)
-    Error(error) -> Error(CannotCreateSnapshotsFolder(error))
-  }
-}
-
 fn accept_snapshot(
   new_snapshot_path: String,
   titles: titles.Titles,
@@ -428,6 +497,25 @@ fn accept_snapshot(
   use snapshot <- result.try(read_new(new_snapshot_path))
   let Snapshot(title:, content:, info: _) = snapshot
   let accepted_snapshot_path = to_accepted_path(new_snapshot_path)
+
+  // Once a snapshot is accepted we need to mark it as referenced. Otherwise
+  // running `gleam run -m birdie accept` (or `review`) followed by
+  // `gleam run -m stale check` would result in all those accepted snapshots
+  // being marked as stale!
+  let referenced_file = referenced_file_path()
+  use _ <- result.try(case simplifile.is_file(referenced_file) {
+    Ok(_) -> Ok(Nil)
+    Error(_) ->
+      simplifile.create_file(referenced_file)
+      |> result.map_error(CannotCreateReferencedFile)
+  })
+  use _ <- result.try(
+    simplifile.append(
+      filepath.base_name(accepted_snapshot_path) <> "\n",
+      to: referenced_file,
+    )
+    |> result.map_error(CannotMarkSnapshotAsReferenced),
+  )
 
   case titles.find(titles, title) {
     // We could find additional info about the test so we add it to the snapshot
@@ -491,10 +579,13 @@ fn to_accepted_path(file: String) -> String {
 // --- PRETTY PRINTING ---------------------------------------------------------
 
 fn explain(error: Error) -> String {
-  let heading = fn(reason) { "[" <> ansi.bold(string.inspect(reason)) <> "] " }
+  let heading = fn(reason: simplifile.FileError) {
+    "[" <> ansi.bold(string.inspect(reason)) <> "] "
+  }
+
   let message = case error {
     SnapshotWithEmptyTitle ->
-      "A snapshot cannot have the empty string as a title."
+      "a snapshot cannot have the empty string as a title."
 
     CannotCreateSnapshotsFolder(reason:) ->
       heading(reason) <> "I couldn't create the snapshots folder."
@@ -538,11 +629,48 @@ fn explain(error: Error) -> String {
       <> "This might happen when someone modifies its content.\n"
       <> "Try deleting the snapshot and recreating it."
 
+    CannotCreateReferencedFile(reason:) ->
+      heading(reason)
+      <> "I couldn't create the file used to track stale snapshots."
+
+    CannotReadReferencedFile(reason:) ->
+      heading(reason)
+      <> "I couldn't read the file used to track stale snapshots."
+
+    CannotMarkSnapshotAsReferenced(reason:) ->
+      heading(reason)
+      <> "I couldn't write to the file used to track stale snapshots."
+
     CannotFindProjectRoot(reason:)
     | CannotGetTitles(titles.CannotFindProjectRoot(reason:)) ->
       heading(reason)
       <> "I couldn't locate the project's root where the snapshot's"
       <> " folder should be."
+
+    MissingReferencedFile -> {
+      "I couldn't find any information about stale snapshots.\n"
+      <> "Remember you have to run `gleam test` first, so I can find any stale "
+      <> "snapshot."
+    }
+
+    StaleSnapshotsFound(stale_snapshots:) -> {
+      let titles =
+        list.map(stale_snapshots, fn(snapshot) {
+          "  - " <> filepath.strip_extension(snapshot)
+        })
+        |> string.join(with: "\n")
+
+      "I found the following stale snapshots:\n\n"
+      <> titles
+      <> "\n\n"
+      <> "These snapshots were not referenced by any snapshot test during the "
+      <> "last `gleam test`\n"
+      <> "Hint: run `gleam run -m birdie stale delete` to delete them"
+    }
+
+    CannotDeleteStaleSnapshot(reason:) -> {
+      heading(reason) <> "I couldn't delete one of the stale snapshots."
+    }
 
     CannotGetTitles(titles.CannotReadTestDirectory(reason:)) ->
       heading(reason) <> "I couldn't list the contents of the test folder."
@@ -570,7 +698,7 @@ fn explain(error: Error) -> String {
           <> ansi.italic(to_function_name(other_file, other_test_name))
       }
 
-      "It looks like there's some snapshot tests sharing the same title:
+      "it looks like there's some snapshot tests sharing the same title:
 
   " <> ansi.italic("\"" <> title <> "\"") <> "
 
@@ -877,6 +1005,16 @@ fn parse_and_run(args: List(String)) {
       |> io.println
       exit(1)
     }
+    Error(MissingSubcommand(command:)) -> {
+      cli.missing_subcommand_error(birdie_version, command)
+      |> io.println
+      exit(1)
+    }
+    Error(UnexpectedArgument(command:, argument:)) -> {
+      cli.unexpected_argument_error(birdie_version, command, argument)
+      |> io.println
+      exit(1)
+    }
     Error(UnknownCommand(command:)) ->
       case cli.similar_command(to: command) {
         Error(Nil) -> {
@@ -896,14 +1034,7 @@ fn parse_and_run(args: List(String)) {
 
           case ask_yes_or_no(prompt) {
             No -> {
-              io.println(
-                "\n"
-                <> cli.help_text(
-                  birdie_version,
-                  for: Help,
-                  explaining: FullCommand,
-                ),
-              )
+              io.println("\n" <> cli.main_help_text())
               exit(1)
             }
             Yes ->
@@ -936,6 +1067,8 @@ fn run_command(command: Command) -> Nil {
     Review -> report_status(review())
     Accept -> report_status(accept_all())
     Reject -> report_status(reject_all())
+    Stale(CheckStale) -> report_status(check_stale())
+    Stale(DeleteStale) -> report_status(delete_stale())
 
     Help ->
       io.println(cli.help_text(
@@ -954,7 +1087,7 @@ fn run_command(command: Command) -> Nil {
 }
 
 fn review() -> Result(Nil, Error) {
-  use snapshots_folder <- result.try(find_snapshots_folder())
+  use snapshots_folder <- result.try(snapshot_folder())
   let get_titles = titles.from_test_directory()
   use titles <- result.try(result.map_error(get_titles, CannotGetTitles))
   use _ <- result.try(update_accepted_snapshots(snapshots_folder, titles))
@@ -1168,7 +1301,7 @@ fn ask_choice(mode: ReviewMode) -> Result(ReviewChoice, Error) {
 
 fn accept_all() -> Result(Nil, Error) {
   io.println("Looking for new snapshots...")
-  use snapshots_folder <- result.try(find_snapshots_folder())
+  use snapshots_folder <- result.try(snapshot_folder())
   use new_snapshots <- result.try(list_new_snapshots(in: snapshots_folder))
 
   let get_titles = titles.from_test_directory()
@@ -1186,7 +1319,7 @@ fn accept_all() -> Result(Nil, Error) {
 
 fn reject_all() -> Result(Nil, Error) {
   io.println("Looking for new snapshots...")
-  use snapshots_folder <- result.try(find_snapshots_folder())
+  use snapshots_folder <- result.try(snapshot_folder())
   use new_snapshots <- result.try(list_new_snapshots(in: snapshots_folder))
 
   let get_titles = titles.from_test_directory()
@@ -1202,10 +1335,71 @@ fn reject_all() -> Result(Nil, Error) {
   list.try_each(new_snapshots, reject_snapshot)
 }
 
+fn stale_snapshots_file_names() -> Result(List(String), Error) {
+  use snapshots_folder <- result.try(snapshot_folder())
+  let referenced_file = referenced_file_path()
+  case simplifile.read(referenced_file) {
+    // If the file is not there we just give up. It means that we didn't run
+    // `gleam test` beforehand.
+    Error(Enoent) -> Error(MissingReferencedFile)
+
+    // If the file cannot be read for any other reason we end up reporting the
+    // error.
+    Error(reason) -> Error(CannotReadReferencedFile(reason:))
+
+    // Otherwise we can continue checking!
+    Ok(non_stale_snapshots) -> {
+      let existing_accepted_snapshots =
+        simplifile.get_files(in: snapshots_folder)
+        |> result.unwrap(or: [])
+        |> list.fold(from: set.new(), with: fn(files, file) {
+          case filepath.extension(file) == Ok(accepted_extension) {
+            True -> set.insert(files, filepath.base_name(file))
+            False -> files
+          }
+        })
+
+      let non_stale_snapshots = string.split(non_stale_snapshots, on: "\n")
+
+      existing_accepted_snapshots
+      |> set.drop(non_stale_snapshots)
+      |> set.to_list
+      |> Ok
+    }
+  }
+}
+
+fn check_stale() -> Result(Nil, Error) {
+  io.println("Checking stale snapshots...")
+  use stale_snapshots <- result.try(stale_snapshots_file_names())
+  case stale_snapshots {
+    [] -> Ok(Nil)
+    [_, ..] -> Error(StaleSnapshotsFound(stale_snapshots:))
+  }
+}
+
+fn delete_stale() -> Result(Nil, Error) {
+  io.println("Checking stale snapshots...")
+  use snapshots_folder <- result.try(snapshot_folder())
+  use stale_snapshots <- result.try(stale_snapshots_file_names())
+
+  list.try_each(stale_snapshots, fn(stale_snapshot) {
+    filepath.join(snapshots_folder, stale_snapshot)
+    |> simplifile.delete
+  })
+  |> result.map_error(CannotDeleteStaleSnapshot(reason: _))
+}
+
 fn report_status(result: Result(Nil, Error)) -> Nil {
   case result {
-    Ok(Nil) -> io.println(ansi.green("🐦‍⬛ Done!"))
-    Error(error) -> io.println_error(ansi.red("Error: ") <> explain(error))
+    Ok(Nil) -> {
+      io.println(ansi.green("🐦‍⬛ Done!"))
+      exit(0)
+    }
+    Error(error) -> {
+      io.println_error(ansi.red("Error: ") <> explain(error))
+      exit(1)
+    }
   }
 }
 
