@@ -1,6 +1,7 @@
 import argv
 import birdie/internal/cli.{
-  type Command, Help, UnknownCommand, UnknownOption, UnknownSubcommand,
+  type Command, Accept, FullCommand, Help, Reject, Review, UnknownCommand,
+  UnknownOption, UnknownSubcommand, WithHelpOption,
 }
 import birdie/internal/diff.{type DiffLine, DiffLine}
 import birdie/internal/project
@@ -879,13 +880,13 @@ fn parse_and_run(args: List(String)) {
     Error(UnknownCommand(command:)) ->
       case cli.similar_command(to: command) {
         Error(Nil) -> {
-          cli.unknown_command_error(birdie_version, command, True)
+          cli.unknown_command_error(command, True)
           |> io.println
           exit(1)
         }
 
         Ok(new_command) -> {
-          cli.unknown_command_error(birdie_version, command, False)
+          cli.unknown_command_error(command, False)
           |> io.println
 
           let prompt =
@@ -895,8 +896,14 @@ fn parse_and_run(args: List(String)) {
 
           case ask_yes_or_no(prompt) {
             No -> {
-              { "\n" <> cli.help_text(birdie_version, for: None) }
-              |> io.println
+              io.println(
+                "\n"
+                <> cli.help_text(
+                  birdie_version,
+                  for: Help,
+                  explaining: FullCommand,
+                ),
+              )
               exit(1)
             }
             Yes ->
@@ -926,13 +933,23 @@ type Answer {
 
 fn run_command(command: Command) -> Nil {
   case command {
-    cli.Review -> report_status(review())
-    cli.Accept -> report_status(accept_all())
-    cli.Reject -> report_status(reject_all())
-    Help(command) -> {
-      cli.help_text(birdie_version, for: command)
-      |> io.println
-    }
+    Review -> report_status(review())
+    Accept -> report_status(accept_all())
+    Reject -> report_status(reject_all())
+
+    Help ->
+      io.println(cli.help_text(
+        birdie_version,
+        for: Help,
+        explaining: FullCommand,
+      ))
+
+    WithHelpOption(command:, explained:) ->
+      io.println(cli.help_text(
+        birdie_version,
+        for: command,
+        explaining: explained,
+      ))
   }
 }
 

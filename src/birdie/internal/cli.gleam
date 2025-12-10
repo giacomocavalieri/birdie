@@ -10,7 +10,21 @@ pub type Command {
   Review
   Accept
   Reject
-  Help(command: Option(Command))
+  Help
+
+  WithHelpOption(command: Command, explained: Explained)
+}
+
+pub type Explained {
+  /// We're tasked with helping with a command in full, considering its sub
+  /// commands as well: `gleam run -m birdie stale check --help`
+  ///
+  FullCommand
+
+  /// We're tasked with helping with a command that would otherwise be invalid
+  /// because it's missing some required subcommand, it's still valid to ask for
+  /// help there: `gleam run -m birdie stale --help`
+  TopLevelCommand
 }
 
 pub type Error {
@@ -43,7 +57,7 @@ pub fn parse(args: List(String)) -> Result(Command, Error) {
     ["accept", subcommand, ..] ->
       Error(UnknownSubcommand(command: Accept, subcommand:))
 
-    ["help", ..] -> Ok(Help(None))
+    ["help", ..] -> Ok(Help)
 
     [command, ..] -> Error(UnknownCommand(command:))
   }
@@ -54,7 +68,7 @@ fn or_help(command: Command, options: List(String)) -> Result(Command, Error) {
     Ok(option) -> Error(UnknownOption(command:, option:))
     Error(_) ->
       case list.any(options, is_help) {
-        True -> Ok(Help(Some(command)))
+        True -> Ok(WithHelpOption(command, explained: FullCommand))
         False -> Ok(command)
       }
   }
@@ -88,11 +102,7 @@ pub fn all_commands() -> List(String) {
 
 // ERROR MESSAGES --------------------------------------------------------------
 
-pub fn unknown_command_error(
-  birdie_version: String,
-  command: String,
-  show_help_text: Bool,
-) -> String {
+pub fn unknown_command_error(command: String, show_help_text: Bool) -> String {
   let message =
     ansi.red("Error: ")
     <> style_invalid_value(command)
@@ -100,7 +110,7 @@ pub fn unknown_command_error(
 
   case show_help_text {
     False -> message
-    True -> message <> "\n\n" <> help_text(birdie_version, None)
+    True -> message <> "\n\n" <> main_help_text()
   }
 }
 
@@ -112,7 +122,7 @@ pub fn unknown_subcommand_error(
   ansi.red("Error: ")
   <> style_invalid_value(subcommand)
   <> " is not a valid subcommand\n\n"
-  <> command_help_text(birdie_version, command)
+  <> help_text(birdie_version, for: command, explaining: TopLevelCommand)
 }
 
 pub fn unknown_option_error(
@@ -123,7 +133,7 @@ pub fn unknown_option_error(
   ansi.red("Error: ")
   <> style_invalid_value(option)
   <> " is not a valid option\n\n"
-  <> help_text(birdie_version, for: Some(command))
+  <> help_text(birdie_version, for: command, explaining: FullCommand)
 }
 
 fn style_invalid_value(value: String) -> String {
@@ -132,34 +142,25 @@ fn style_invalid_value(value: String) -> String {
 
 // HELP TEXTS ------------------------------------------------------------------
 
-pub fn help_text(birdie_version: String, for command: Option(Command)) -> String {
-  case command {
-    None -> help_help_text(birdie_version)
-    Some(command) -> subcommand_help_text(birdie_version, command)
-  }
-}
-
-/// Returns the help text describing a given command with its subcommands.
-/// So this goes as in depth as possible.
+/// Returns the help text for the given command.
 ///
-fn subcommand_help_text(birdie_version: String, command: Command) -> String {
-  case command {
-    Help(command:) -> help_text(birdie_version, for: command)
-    Review -> command_help_text(birdie_version, command)
-    Accept -> command_help_text(birdie_version, command)
-    Reject -> command_help_text(birdie_version, command)
-  }
-}
+pub fn help_text(
+  birdie_version: String,
+  for command: Command,
+  explaining explained: Explained,
+) -> String {
+  case command, explained {
+    // These commands do not have any subcommands, so the explanation text is
+    // always going to be the same, no matter what we're asked to explain.
+    Help(..), _ -> help_help_text(birdie_version)
+    Accept, _ -> accept_help_text()
+    Reject, _ -> reject_help_text()
+    Review, _ -> review_help_text()
 
-/// Returns the help text for the given command _ignoring all of its subcommands
-/// that might be there!_
-///
-fn command_help_text(birdie_version: String, command: Command) -> String {
-  case command {
-    Help(..) -> help_help_text(birdie_version)
-    Accept -> accept_help_text()
-    Reject -> reject_help_text()
-    Review -> review_help_text()
+    // This would only happen if we wrapped a `WithHelpOption` command in one
+    // other. Just for the sake of safety I return a value instead of panicking.
+    WithHelpOption(command:, explained:), _ ->
+      help_text(birdie_version, command, explained)
   }
 }
 
@@ -190,11 +191,11 @@ fn accept_help_text() -> String {
 fn help_help_text(birdie_version: String) -> String {
   { ansi.green("🐦‍⬛ birdie ") <> "v" <> birdie_version }
   <> "\n\n"
-  <> usage([], Some(Command))
-  <> "\n\n"
-  <> command_menu()
-  <> "\n\n"
-  <> options()
+  <> main_help_text()
+}
+
+fn main_help_text() -> String {
+  usage([], Some(Command)) <> "\n\n" <> command_menu() <> "\n\n" <> options()
 }
 
 fn command_menu() -> String {

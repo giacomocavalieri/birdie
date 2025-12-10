@@ -1,9 +1,8 @@
 import birdie/internal/cli.{
-  type Command, Accept, Help, Reject, Review, UnknownCommand, UnknownOption,
-  UnknownSubcommand,
+  type Command, Accept, FullCommand, Help, Reject, Review, UnknownCommand,
+  UnknownOption, UnknownSubcommand, WithHelpOption,
 }
 import gleam/list
-import gleam/option.{None, Some}
 import gleam/string
 
 pub fn unknown_top_level_command_test() {
@@ -18,13 +17,14 @@ pub fn unknown_top_level_command_test() {
 pub fn parse_review_test() {
   // No arguments are interpreted as the review command
   assert Ok(Review) == cli.parse([])
-  assert Ok(Help(Some(Review))) == cli.parse(["--help"])
-  assert Ok(Help(Some(Review))) == cli.parse(["-h"])
+  assert Ok(WithHelpOption(Review, FullCommand)) == cli.parse(["--help"])
+  assert Ok(WithHelpOption(Review, FullCommand)) == cli.parse(["-h"])
 
   // Explicitly using the review command
   assert Ok(Review) == cli.parse(["review"])
-  assert Ok(Help(Some(Review))) == cli.parse(["review", "--help"])
-  assert Ok(Help(Some(Review))) == cli.parse(["review", "-h"])
+  assert Ok(WithHelpOption(Review, FullCommand))
+    == cli.parse(["review", "--help"])
+  assert Ok(WithHelpOption(Review, FullCommand)) == cli.parse(["review", "-h"])
 
   // Unknown subcommands and options
   assert Error(UnknownSubcommand(Review, "wibble"))
@@ -39,8 +39,9 @@ pub fn parse_review_test() {
 pub fn parse_accept_test() {
   // Explicitly using the review command
   assert Ok(Accept) == cli.parse(["accept"])
-  assert Ok(Help(Some(Accept))) == cli.parse(["accept", "--help"])
-  assert Ok(Help(Some(Accept))) == cli.parse(["accept", "-h"])
+  assert Ok(WithHelpOption(Accept, FullCommand))
+    == cli.parse(["accept", "--help"])
+  assert Ok(WithHelpOption(Accept, FullCommand)) == cli.parse(["accept", "-h"])
 
   // Unknown subcommands and options
   assert Error(UnknownSubcommand(Accept, "wibble"))
@@ -53,8 +54,9 @@ pub fn parse_accept_test() {
 pub fn parse_reject_test() {
   // Explicitly using the review command
   assert Ok(Reject) == cli.parse(["reject"])
-  assert Ok(Help(Some(Reject))) == cli.parse(["reject", "--help"])
-  assert Ok(Help(Some(Reject))) == cli.parse(["reject", "-h"])
+  assert Ok(WithHelpOption(Reject, FullCommand))
+    == cli.parse(["reject", "--help"])
+  assert Ok(WithHelpOption(Reject, FullCommand)) == cli.parse(["reject", "-h"])
 
   // Unknown subcommands and options
   assert Error(UnknownSubcommand(Reject, "wibble"))
@@ -66,9 +68,9 @@ pub fn parse_reject_test() {
 
 pub fn parse_help_test() {
   // Explicitly using the review command
-  assert Ok(Help(None)) == cli.parse(["help"])
-  assert Ok(Help(None)) == cli.parse(["help", "--help"])
-  assert Ok(Help(None)) == cli.parse(["help", "-h"])
+  assert Ok(Help) == cli.parse(["help"])
+  assert Ok(Help) == cli.parse(["help", "--help"])
+  assert Ok(Help) == cli.parse(["help", "-h"])
 }
 
 pub fn all_commands_test() {
@@ -78,12 +80,14 @@ pub fn all_commands_test() {
 fn all_known_commands(all: List(Command)) -> List(String) {
   case all {
     [] -> all_known_commands([Accept, ..all])
-    [Accept, ..] -> all_known_commands([Help(None), ..all])
-    [Help(..), ..] -> all_known_commands([Reject, ..all])
+    [Accept, ..] -> all_known_commands([Help, ..all])
+    [Help, ..] -> all_known_commands([Reject, ..all])
     [Reject, ..] -> all_known_commands([Review, ..all])
     [Review, ..] ->
       list.map(all, command_to_string)
       |> list.sort(string.compare)
+
+    [WithHelpOption(..), ..] -> panic as "this command is never suggested"
   }
 }
 
@@ -93,5 +97,6 @@ fn command_to_string(command: Command) {
     Help(..) -> "help"
     Reject -> "reject"
     Review -> "review"
+    WithHelpOption(..) -> panic as "this command is never suggested"
   }
 }
