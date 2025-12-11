@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.5.0 - 2025-12-11
+## 1.5.1 - 2025-12-11
 
 - The CLI has been improved with better error messages and a nicer overall look.
 - Birdie now has better tooling to deal with stale snapshots. A stale snapshot

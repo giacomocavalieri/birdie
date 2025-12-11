@@ -26,7 +26,7 @@ import rank
 import simplifile.{Eexist, Enoent}
 import term_size
 
-const birdie_version = "1.5.0"
+const birdie_version = "1.5.1"
 
 const hint_review_message = "run `gleam run -m birdie` to review the snapshots"
 
@@ -93,7 +93,7 @@ type Snapshot(status) {
 ///
 fn global_referenced_file() -> Result(String, Error) {
   use <- global_value.create_with_unique_name("birdie.referenced_file")
-  let referenced_file = referenced_file_path()
+  use referenced_file <- result.try(referenced_file_path())
   case simplifile.create_file(referenced_file) {
     Ok(_) -> Ok(referenced_file)
     Error(Eexist) ->
@@ -104,8 +104,12 @@ fn global_referenced_file() -> Result(String, Error) {
   }
 }
 
-fn referenced_file_path() -> String {
-  filepath.join(get_temp_directory(), "referenced.txt")
+fn referenced_file_path() -> Result(String, Error) {
+  use name <- result.try(
+    project.name()
+    |> result.map_error(CannotReadReferencedFile),
+  )
+  Ok(filepath.join(get_temp_directory(), name <> "_referenced.txt"))
 }
 
 fn get_temp_directory() -> String {
@@ -502,7 +506,7 @@ fn accept_snapshot(
   // running `gleam run -m birdie accept` (or `review`) followed by
   // `gleam run -m stale check` would result in all those accepted snapshots
   // being marked as stale!
-  let referenced_file = referenced_file_path()
+  use referenced_file <- result.try(referenced_file_path())
   use _ <- result.try(case simplifile.is_file(referenced_file) {
     Ok(_) -> Ok(Nil)
     Error(_) ->
@@ -1337,7 +1341,7 @@ fn reject_all() -> Result(Nil, Error) {
 
 fn stale_snapshots_file_names() -> Result(List(String), Error) {
   use snapshots_folder <- result.try(snapshot_folder())
-  let referenced_file = referenced_file_path()
+  use referenced_file <- result.try(referenced_file_path())
   case simplifile.read(referenced_file) {
     // If the file is not there we just give up. It means that we didn't run
     // `gleam test` beforehand.
