@@ -13,8 +13,8 @@
   It's easy to end up having stale snapshots, especially when changing the name
   of a snapshot and forgetting to remove the olde one.
   The new `stale` command allows to:
-  - `gleam run -m stale check` to check if there's any stale snapshot
-  - `gleam run -m stale delete` to remove any stale snapshot
+  - `gleam run -m birdie stale check` to check if there's any stale snapshot
+  - `gleam run -m birdie stale delete` to remove any stale snapshot
 
 ## 1.4.1 - 2025-09-28
 
