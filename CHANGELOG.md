@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.2 - 2025-12-11
+
+- Updated the `glance` dependency to `>= 6.0.0 and < 7.0.0`.
+
 ## 1.5.1 - 2025-12-11
 
 - The CLI has been improved with better error messages and a nicer overall look.
