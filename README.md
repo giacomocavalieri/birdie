@@ -2,7 +2,6 @@
 
 [![Package Version](https://img.shields.io/hexpm/v/birdie)](https://hex.pm/packages/birdie)
 [![Hex Docs](https://img.shields.io/badge/hex-docs-ffaff3)](https://hexdocs.pm/birdie/)
-![Supported targets](https://img.shields.io/badge/supports-all_targets-ffaff3)
 
 Snapshot testing allows you to perform assertions without having to write the
 expectation yourself. Birdie will store a snapshot of the expected value and

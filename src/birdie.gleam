@@ -26,7 +26,7 @@ import rank
 import simplifile.{Eexist, Enoent}
 import term_size
 
-const birdie_version = "1.4.1"
+const birdie_version = "1.5.0"
 
 const hint_review_message = "run `gleam run -m birdie` to review the snapshots"
 
