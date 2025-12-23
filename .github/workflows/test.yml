@@ -17,6 +17,9 @@ jobs:
           gleam-version: "1.13.0"
           rebar3-version: "3"
       - run: gleam deps download
-      - run: gleam test
+      - run: gleam test --target=erl
+      - run: gleam test --target=js --runtime=node
+      - run: gleam test --target=js --runtime=deno
+      - run: gleam test --target=js --runtime=bun
       - run: gleam run -m birdie stale check
       - run: gleam format --check src test

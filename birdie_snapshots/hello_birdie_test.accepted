@@ -1,5 +1,5 @@
 ---
-version: 1.4.1
+version: 1.5.2
 title: hello birdie test
 file: ./test/birdie_test.gleam
 test_name: hello_birdie_test

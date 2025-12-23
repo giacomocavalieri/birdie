@@ -91,6 +91,7 @@ fn pretty_titles(ts: titles.Titles) -> String {
   let literals =
     dict.to_list(titles.literals(ts))
     |> list.map(fn(pair) { pretty(pair.0, pair.1) })
+    |> list.sort(string.compare)
     |> string.join(with: "\n")
 
   let prefixes =

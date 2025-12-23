@@ -4,12 +4,11 @@ import birdie/internal/cli.{
   MissingSubcommand, Reject, Review, Stale, UnexpectedArgument, UnknownCommand,
   UnknownOption, UnknownSubcommand, WithHelpOption,
 }
-import envoy
-
 import birdie/internal/diff.{type DiffLine, DiffLine}
 import birdie/internal/project
 import birdie/internal/titles
 import birdie/internal/version
+import envoy
 import filepath
 import gleam/int
 import gleam/io
@@ -130,6 +129,7 @@ fn get_temp_directory() -> String {
 }
 
 @external(erlang, "birdie_ffi", "is_windows")
+@external(javascript, "./birdie_ffi.mjs", "is_windows")
 fn is_windows() -> Bool
 
 /// Finds the snapshots folder at the root of the project the command is run
@@ -1449,6 +1449,7 @@ fn clear_line() -> Nil {
 // --- FFI ---------------------------------------------------------------------
 
 @external(erlang, "erlang", "halt")
+@external(javascript, "./birdie_ffi.mjs", "halt")
 fn exit(status_code: Int) -> Nil
 
 /// Reads a line from standard input with the given prompt.
@@ -1461,4 +1462,5 @@ fn exit(status_code: Int) -> Nil
 /// // -> Ok("Gleam\n")
 /// ```
 @external(erlang, "birdie_ffi", "get_line")
+@external(javascript, "./birdie_ffi.mjs", "get_line")
 fn get_line(prompt prompt: String) -> Result(String, Nil)

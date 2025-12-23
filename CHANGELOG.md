@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.3 - 2025-12-23 🎄 Happy Holidays!
+
+- Fixed a bug that inadvertently made it so the `birdie.snap` function no longer
+  supported the JavaScript target.
+
 ## 1.5.2 - 2025-12-11
 
 - Updated the `glance` dependency to `>= 6.0.0 and < 7.0.0`.

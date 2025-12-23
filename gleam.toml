@@ -6,6 +6,11 @@ licences = ["Apache-2.0"]
 repository = { type = "github", user = "giacomocavalieri", repo = "birdie" }
 target = "erlang"
 
+[javascript.deno]
+allow_env = ["TMPDIR", "TEMP", "TMP"]
+allow_read = true
+allow_write = true
+
 [dependencies]
 gleam_stdlib = ">= 0.43.0 and < 1.0.0"
 justin = ">= 1.0.1 and < 2.0.0"
