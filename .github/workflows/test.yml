@@ -7,19 +7,90 @@ on:
   pull_request:
 
 jobs:
-  test:
+  format:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: erlef/setup-beam@v1
         with:
-          otp-version: "27.1.2"
+          otp-version: "28"
           gleam-version: "1.13.0"
           rebar3-version: "3"
-      - run: gleam deps download
-      - run: gleam test --target=erl
-      - run: gleam test --target=js --runtime=node
-      - run: gleam test --target=js --runtime=deno
-      - run: gleam test --target=js --runtime=bun
-      - run: gleam run -m birdie stale check
       - run: gleam format --check src test
+
+  test-erl:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        otp-version: [27, 28]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ matrix.otp-version }}
+          gleam-version: "1.13.0"
+          rebar3-version: "3"
+      - run: gleam test --target=erl
+
+  stale-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "28"
+          gleam-version: "1.13.0"
+          rebar3-version: "3"
+      - run: gleam test --target=erl
+      - run: gleam run -m birdie stale check
+
+  test-node:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: ["latest"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "28"
+          gleam-version: "1.13.0"
+          rebar3-version: "3"
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node-version }}
+      - run: gleam test --target=js --runtime=node
+
+  test-deno:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        deno-version: ["latest", "lts"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "28"
+          gleam-version: "1.13.0"
+          rebar3-version: "3"
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: ${{ matrix.deno-version }}
+      - run: gleam test --target=js --runtime=deno
+
+  test-bun:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        bun-version: ["latest"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "28"
+          gleam-version: "1.13.0"
+          rebar3-version: "3"
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ matrix.bun-version }}
+      - run: gleam test --target=js --runtime=bun
