@@ -61,7 +61,10 @@ type Error {
 
   CannotFindProjectRoot(reason: simplifile.FileError)
 
-  CannotCreateReferencedFile(reason: simplifile.FileError)
+  CannotCreateReferencedFile(
+    referenced_file: String,
+    reason: simplifile.FileError,
+  )
 
   CannotReadReferencedFile(reason: simplifile.FileError)
 
@@ -99,8 +102,13 @@ fn global_referenced_file() -> Result(String, Error) {
     Error(Eexist) ->
       simplifile.write("", to: referenced_file)
       |> result.replace(referenced_file)
-      |> result.map_error(CannotCreateReferencedFile(reason: _))
-    Error(reason) -> Error(CannotCreateReferencedFile(reason:))
+      |> result.map_error(CannotCreateReferencedFile(
+        referenced_file:,
+        reason: _,
+      ))
+
+    Error(reason) ->
+      Error(CannotCreateReferencedFile(referenced_file:, reason:))
   }
 }
 
@@ -511,7 +519,10 @@ fn accept_snapshot(
     Ok(_) -> Ok(Nil)
     Error(_) ->
       simplifile.create_file(referenced_file)
-      |> result.map_error(CannotCreateReferencedFile)
+      |> result.map_error(CannotCreateReferencedFile(
+        referenced_file:,
+        reason: _,
+      ))
   })
   use _ <- result.try(
     simplifile.append(
@@ -633,9 +644,10 @@ fn explain(error: Error) -> String {
       <> "This might happen when someone modifies its content.\n"
       <> "Try deleting the snapshot and recreating it."
 
-    CannotCreateReferencedFile(reason:) ->
+    CannotCreateReferencedFile(reason:, referenced_file:) ->
       heading(reason)
-      <> "I couldn't create the file used to track stale snapshots."
+      <> "I couldn't create the file used to track stale snapshots:\n"
+      <> { "  `" <> referenced_file <> "`." }
 
     CannotReadReferencedFile(reason:) ->
       heading(reason)
