@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.5.4 - 2026-01-28
 
 - Improved the error message birdie produces when it can't open the temporary
   file due to not having the right permission.
