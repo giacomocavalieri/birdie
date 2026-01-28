@@ -60,9 +60,9 @@ type Error {
 
   CannotFindProjectRoot(reason: simplifile.FileError)
 
-  CannotCreateReferencedFile(reason: simplifile.FileError)
+  CannotCreateReferencedFile(file: String, reason: simplifile.FileError)
 
-  CannotReadReferencedFile(reason: simplifile.FileError)
+  CannotReadReferencedFile(file: String, reason: simplifile.FileError)
 
   CannotMarkSnapshotAsReferenced(reason: simplifile.FileError)
 
@@ -73,6 +73,7 @@ type Error {
   MissingReferencedFile
 
   CannotGetTitles(reason: titles.Error)
+  CannotFigureOutProjectName(reason: simplifile.FileError)
 }
 
 // --- THE SNAPSHOT TYPE -------------------------------------------------------
@@ -98,15 +99,20 @@ fn global_referenced_file() -> Result(String, Error) {
     Error(Eexist) ->
       simplifile.write("", to: referenced_file)
       |> result.replace(referenced_file)
-      |> result.map_error(CannotCreateReferencedFile(reason: _))
-    Error(reason) -> Error(CannotCreateReferencedFile(reason:))
+      |> result.map_error(CannotCreateReferencedFile(
+        file: referenced_file,
+        reason: _,
+      ))
+
+    Error(reason) ->
+      Error(CannotCreateReferencedFile(file: referenced_file, reason:))
   }
 }
 
 fn referenced_file_path() -> Result(String, Error) {
   use name <- result.try(
     project.name()
-    |> result.map_error(CannotReadReferencedFile),
+    |> result.map_error(CannotFigureOutProjectName),
   )
   Ok(filepath.join(get_temp_directory(), name <> "_referenced.txt"))
 }
@@ -511,7 +517,10 @@ fn accept_snapshot(
     Ok(_) -> Ok(Nil)
     Error(_) ->
       simplifile.create_file(referenced_file)
-      |> result.map_error(CannotCreateReferencedFile)
+      |> result.map_error(CannotCreateReferencedFile(
+        file: referenced_file,
+        reason: _,
+      ))
   })
   use _ <- result.try(
     simplifile.append(
@@ -633,11 +642,27 @@ fn explain(error: Error) -> String {
       <> "This might happen when someone modifies its content.\n"
       <> "Try deleting the snapshot and recreating it."
 
-    CannotCreateReferencedFile(reason:) ->
+    CannotCreateReferencedFile(file:, reason: simplifile.Eacces) ->
+      "I don't have the required permission to create the file used to track\n"
+      <> { "stale snapshots at: `" <> file <> "`.\n" }
+      <> "This usually happens when the current user doesn't have a write\n"
+      <> "permission for the system's temporary directory.\n\n"
+      <> "Hint: you can set the $TEMP environment variable to make me use a\n"
+      <> "different directory to write the reference file in."
+
+    CannotReadReferencedFile(file:, reason: simplifile.Eacces) ->
+      "I don't have the required permission to read the file used to track\n"
+      <> { "stale snapshots at: `" <> file <> "`.\n" }
+      <> "This usually happens when the current user doesn't have a write\n"
+      <> "permission for the system's temporary directory.\n\n"
+      <> "Hint: you can set the $TEMP environment variable to make me use a\n"
+      <> "different directory to write the reference file in."
+
+    CannotCreateReferencedFile(file: _, reason:) ->
       heading(reason)
       <> "I couldn't create the file used to track stale snapshots."
 
-    CannotReadReferencedFile(reason:) ->
+    CannotReadReferencedFile(file: _, reason:) ->
       heading(reason)
       <> "I couldn't read the file used to track stale snapshots."
 
@@ -678,6 +703,9 @@ fn explain(error: Error) -> String {
 
     CannotGetTitles(titles.CannotReadTestDirectory(reason:)) ->
       heading(reason) <> "I couldn't list the contents of the test folder."
+
+    CannotFigureOutProjectName(reason:) ->
+      heading(reason) <> "I couldn't figure out the current project's name."
 
     CannotGetTitles(titles.CannotReadTestFile(reason:, file:)) ->
       heading(reason)
@@ -1349,7 +1377,8 @@ fn stale_snapshots_file_names() -> Result(List(String), Error) {
 
     // If the file cannot be read for any other reason we end up reporting the
     // error.
-    Error(reason) -> Error(CannotReadReferencedFile(reason:))
+    Error(reason) ->
+      Error(CannotReadReferencedFile(file: referenced_file, reason:))
 
     // Otherwise we can continue checking!
     Ok(non_stale_snapshots) -> {

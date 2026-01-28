@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Improved the error message birdie produces when it can't open the temporary
+  file due to not having the right permission.
+
 ## 1.5.3 - 2025-12-23 🎄 Happy Holidays!
 
 - Fixed a bug that inadvertently made it so the `birdie.snap` function no longer
