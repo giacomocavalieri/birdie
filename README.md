@@ -6,7 +6,7 @@
 Snapshot testing allows you to perform assertions without having to write the
 expectation yourself. Birdie will store a snapshot of the expected value and
 compare future runs of the same test against it. Imagine doing a
-`should.equal(expected, got)` where you don't have to take care of writing the
+`assert got == expected` where you don't have to take care of writing the
 expected output.
 
 ## Writing snapshot tests with Birdie
