@@ -9,6 +9,10 @@ compare future runs of the same test against it. Imagine doing a
 `assert got == expected` where you don't have to take care of writing the
 expected output.
 
+> If you want a video introduction to snapshot testing, you can check out
+> [my talk on the topic](https://youtu.be/DpakV96jeRk?si=ODqE_geVaMIR0Qoa)
+> from Code BEAM Europe.
+
 ## Writing snapshot tests with Birdie
 
 First you'll want to add the package to your dependencies:
