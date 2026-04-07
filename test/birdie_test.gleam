@@ -1,3 +1,5 @@
+// aèa
+
 import birdie
 import gleam/string
 import gleeunit
@@ -7,8 +9,7 @@ pub fn main() {
 }
 
 pub fn hello_birdie_test() {
-  "🐦‍⬛ smile for the birdie!"
-  |> birdie.snap(title: "hello birdie test")
+  "🐦‍⬛" |> birdie.snap(title: "hello birdie test")
 }
 
 pub fn a_result_test() {

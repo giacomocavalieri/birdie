@@ -1,5 +1,5 @@
 import birdie/internal/cli.{
-  type Command, Accept, CheckStale, DeleteStale, FullCommand, Help, Reject,
+  type Command, Accept, CheckStale, DeleteStale, FullCommand, Help, Lsp, Reject,
   Review, Stale, TopLevelCommand, UnexpectedArgument, UnknownCommand,
   UnknownOption, UnknownSubcommand, WithHelpOption,
 }
@@ -121,7 +121,8 @@ fn all_known_commands(all: List(Command)) -> List(String) {
     [Accept, ..] -> all_known_commands([Help, ..all])
     [Help, ..] -> all_known_commands([Reject, ..all])
     [Reject, ..] -> all_known_commands([Stale(CheckStale), ..all])
-    [Stale(_), ..] -> all_known_commands([Review, ..all])
+    [Stale(_), ..] -> all_known_commands([Lsp, ..all])
+    [Lsp, ..] -> all_known_commands([Review, ..all])
     [Review, ..] ->
       list.map(all, command_to_string)
       |> list.sort(string.compare)
@@ -136,6 +137,7 @@ fn command_to_string(command: Command) {
     Help -> "help"
     Reject -> "reject"
     Review -> "review"
+    Lsp -> "lsp"
     Stale(_) -> "stale"
     WithHelpOption(..) -> panic as "this command is never suggested"
   }

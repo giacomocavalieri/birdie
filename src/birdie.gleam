@@ -1,10 +1,11 @@
 import argv
 import birdie/internal/cli.{
-  type Command, Accept, CheckStale, DeleteStale, FullCommand, Help,
+  type Command, Accept, CheckStale, DeleteStale, FullCommand, Help, Lsp,
   MissingSubcommand, Reject, Review, Stale, UnexpectedArgument, UnknownCommand,
   UnknownOption, UnknownSubcommand, WithHelpOption,
 }
 import birdie/internal/diff.{type DiffLine, DiffLine}
+import birdie/internal/lsp
 import birdie/internal/project
 import birdie/internal/titles
 import birdie/internal/version
@@ -1095,6 +1096,7 @@ fn run_command(command: Command) -> Nil {
     Reject -> report_status(reject_all())
     Stale(CheckStale) -> report_status(check_stale())
     Stale(DeleteStale) -> report_status(delete_stale())
+    Lsp -> lsp.start()
 
     Help ->
       io.println(cli.help_text(

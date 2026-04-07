@@ -1,3 +1,4 @@
+import birdie/internal/position.{type Map, type Position}
 import glance.{type Span}
 import gleam/bool
 import gleam/dict.{type Dict}
@@ -9,16 +10,16 @@ import gleam/uri.{type Uri}
 pub opaque type Analyser {
   Analyser(
     /// A dict from module name to the titles inside that module.
-    modules: Dict(String, AnalysedModule),
+    modules: Dict(Uri, AnalysedModule),
     /// A dictionary from snapshot literal title to a dictionary mapping from
     /// modules to locations in that module where the title is used.
     /// This keeps track of where each title is used!
-    literal_titles: Dict(String, Dict(String, List(Span))),
+    literal_titles: Dict(String, Dict(Uri, List(Span))),
   )
 }
 
 pub type Error {
-  NameAlreadyInUse
+  NameAlreadyInUse(title_span: Span)
 }
 
 pub type Warning {
@@ -26,14 +27,14 @@ pub type Warning {
 }
 
 pub type Module {
-  Module(name: String, path: Uri, source: String)
+  Module(path: Uri, source: String)
 }
 
 type AnalysedModule {
-  AnalysedModule(name: String, path: Uri, snapshots: List(SnapshotTest))
+  AnalysedModule(path: Uri, snapshots: List(SnapshotTest), line_numbers: Map)
 }
 
-type SnapshotTest {
+pub type SnapshotTest {
   SnapshotTest(
     /// The title used for the snapshot. For example:
     ///
@@ -78,7 +79,7 @@ pub fn new() -> Analyser {
   Analyser(modules: dict.new(), literal_titles: dict.new())
 }
 
-pub fn remove_module(analyser: Analyser, module: String) -> Analyser {
+pub fn remove_module(analyser: Analyser, module: Uri) -> Analyser {
   let Analyser(modules:, literal_titles:) = analyser
 
   case dict.get(modules, module) {
@@ -88,7 +89,7 @@ pub fn remove_module(analyser: Analyser, module: String) -> Analyser {
     // Found the module we should remove.
     Ok(module) -> {
       // We need to remove it from the analysed modules...
-      let modules = dict.delete(modules, module.name)
+      let modules = dict.delete(modules, module.path)
       // ...and we also need to remove its names from all the name references!
       // In order to do that we go over all the names the module defined and
       // update them removing the reference.
@@ -105,8 +106,8 @@ pub fn remove_module(analyser: Analyser, module: String) -> Analyser {
 fn remove_snapshot_title(
   snapshot: SnapshotTest,
   in module: AnalysedModule,
-  from names: Dict(String, Dict(String, List(Span))),
-) -> Dict(String, Dict(String, List(Span))) {
+  from names: Dict(String, Dict(Uri, List(Span))),
+) -> Dict(String, Dict(Uri, List(Span))) {
   case snapshot.title {
     // If the snapshot doesn't have a literal title then it can't be part of the
     // names, we just skip it!
@@ -116,7 +117,7 @@ fn remove_snapshot_title(
       case dict.get(names, title) {
         Error(_) -> names
         Ok(module_to_spans) -> {
-          let module_to_spans = dict.delete(module_to_spans, module.name)
+          let module_to_spans = dict.delete(module_to_spans, module.path)
           dict.insert(names, title, module_to_spans)
         }
       }
@@ -131,25 +132,23 @@ pub fn warnings(analyser: Analyser) -> List(Warning) {
   todo
 }
 
-pub fn snapshot_title(
+pub fn find_test(
   analyser: Analyser,
-  at path: Uri,
-  hovering span: Span,
-) -> Result(SnapshotTitle, Nil) {
+  in module: Uri,
+  hovered position: Position,
+) -> Result(#(Map, SnapshotTest), Nil) {
   // We first get the module inside of which the hover is taking place.
-  let module_name = todo as "module name from path?"
-  use module <- result.try(dict.get(analyser.modules, module_name))
+  use module <- result.try(dict.get(analyser.modules, module))
   // If it has been analysed, we look for the snapshot that is being hovered.
   list.find_map(module.snapshots, fn(snapshot) {
-    case is_hovered(snapshot, span) {
-      True -> Ok(snapshot.title)
+    let index = position.to_byte_index(module.line_numbers, position)
+    let snapshot_span = snapshot.call_span
+    let is_hovered = snapshot_span.start <= index && index < snapshot_span.end
+    case is_hovered {
+      True -> Ok(#(module.line_numbers, snapshot))
       False -> Error(Nil)
     }
   })
-}
-
-fn is_hovered(snapshot: SnapshotTest, span: Span) -> Bool {
-  todo
 }
 
 // ---- MODULE ANALYSIS --------------------------------------------------------
@@ -165,7 +164,7 @@ fn add_analysed_module(analyser: Analyser, module: AnalysedModule) -> Analyser {
   let Analyser(modules:, literal_titles:) = analyser
 
   // We add the module to the analysed ones...
-  let modules = dict.insert(modules, module.name, module)
+  let modules = dict.insert(modules, module.path, module)
 
   // ...and we keep track of all the literal snapshot names it defines
   let literal_titles =
@@ -178,8 +177,8 @@ fn add_analysed_module(analyser: Analyser, module: AnalysedModule) -> Analyser {
           let spans = list.map(snapshots, fn(snapshot) { snapshot.call_span })
           dict.upsert(literal_titles, title, fn(references) {
             case references {
-              None -> dict.from_list([#(module.name, spans)])
-              Some(references) -> dict.insert(references, module.name, spans)
+              None -> dict.from_list([#(module.path, spans)])
+              Some(references) -> dict.insert(references, module.path, spans)
             }
           })
         }
@@ -217,7 +216,11 @@ fn analyse_module(module: Module) -> Result(AnalysedModule, Nil) {
   case snapshots {
     [] -> Error(Nil)
     [_, ..] ->
-      Ok(AnalysedModule(name: module.name, path: module.path, snapshots:))
+      Ok(AnalysedModule(
+        path: module.path,
+        snapshots:,
+        line_numbers: position.map_from_source(module.source),
+      ))
   }
 }
 

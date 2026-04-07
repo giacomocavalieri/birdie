@@ -14,6 +14,7 @@ pub type Command {
   Stale(subcommand: StaleSubcommand)
 
   WithHelpOption(command: Command, explained: Explained)
+  Lsp
 }
 
 pub type StaleSubcommand {
@@ -52,6 +53,10 @@ pub fn parse(args: List(String)) -> Result(Command, Error) {
 
   case commands {
     [] -> Review |> or_help(options)
+
+    ["lsp"] -> Lsp |> or_help(options)
+    ["lsp", subcommand, ..] ->
+      Error(UnknownSubcommand(command: Lsp, subcommand:))
 
     ["review"] -> Review |> or_help(options)
     ["review", subcommand, ..] ->
@@ -129,7 +134,7 @@ pub fn similar_command(to command: String) -> Result(String, Nil) {
 }
 
 pub fn all_commands() -> List(String) {
-  ["accept", "help", "reject", "review", "stale"]
+  ["accept", "help", "lsp", "reject", "review", "stale"]
 }
 
 // ERROR MESSAGES --------------------------------------------------------------
@@ -198,6 +203,7 @@ fn command_to_string(command: Command) {
     Accept -> "accept"
     Reject -> "reject"
     Help -> "help"
+    Lsp -> "lsp"
   }
 }
 
@@ -221,6 +227,7 @@ pub fn help_text(
     Accept, _ -> accept_help_text()
     Reject, _ -> reject_help_text()
     Review, _ -> review_help_text()
+    Lsp, _ -> lsp_help_text()
 
     Stale(subcommand), FullCommand -> stale_help_text(Some(subcommand))
     Stale(_), TopLevelCommand -> stale_help_text(None)
@@ -230,6 +237,14 @@ pub fn help_text(
     WithHelpOption(command:, explained:), _ ->
       help_text(birdie_version, command, explained)
   }
+}
+
+fn lsp_help_text() -> String {
+  usage(["lsp"], None)
+  <> "\n\n"
+  <> "Start the birdie lsp, to be used by editors."
+  <> "\n\n"
+  <> options()
 }
 
 fn stale_help_text(subcommand: Option(StaleSubcommand)) -> String {
