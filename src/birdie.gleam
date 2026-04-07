@@ -530,11 +530,11 @@ fn accept_snapshot(
     |> result.map_error(CannotMarkSnapshotAsReferenced),
   )
 
-  case titles.find(titles, title) {
+  case titles.info_for_test(titles, titled: title) {
     // We could find additional info about the test so we add it to the snapshot
     // before saving it! So we delete the `new` file and write an `accepted`
     // one with all the new info we found.
-    Ok(titles.LiteralMatch(info)) -> {
+    Ok(info) -> {
       let delete_new_snapshot =
         simplifile.delete(new_snapshot_path)
         |> result.map_error(CannotAcceptSnapshot(_, new_snapshot_path))
@@ -1134,21 +1134,22 @@ fn update_accepted_snapshots(
   use snapshot <- result.try(read_accepted(accepted_snapshot))
   case snapshot {
     None -> Ok(Nil)
-    Some(Snapshot(title:, content: _, info:) as snapshot) ->
-      case titles.find(titles, title), info {
-        Ok(match), Some(existing_info) if match.info != existing_info ->
-          Snapshot(..snapshot, info: Some(match.info))
+    Some(Snapshot(title:, content: _, info: existing_info) as snapshot) ->
+      case titles.info_for_test(titles, titled: title), existing_info {
+        Ok(new_info), Some(existing_info) if new_info != existing_info ->
+          Snapshot(..snapshot, info: Some(new_info))
           |> serialise
           |> simplifile.write(to: accepted_snapshot)
           |> result.map_error(CannotAcceptSnapshot(_, accepted_snapshot))
 
-        Ok(match), None ->
-          Snapshot(..snapshot, info: Some(match.info))
+        Ok(new_info), None ->
+          Snapshot(..snapshot, info: Some(new_info))
           |> serialise
           |> simplifile.write(to: accepted_snapshot)
           |> result.map_error(CannotAcceptSnapshot(_, accepted_snapshot))
 
-        _, _ -> Ok(Nil)
+        Ok(_), Some(_) -> Ok(Nil)
+        Error(_), _ -> Ok(Nil)
       }
   }
 }
@@ -1201,11 +1202,12 @@ fn review_loop(
 
       // We need to add to the new test info about its location and the function
       // it's defined in.
-      let new_snapshot_info = case titles.find(titles, new_snapshot.title) {
-        Ok(titles.LiteralMatch(info:)) -> Some(info)
-        Error(_) -> None
-      }
-      let new_snapshot = Snapshot(..new_snapshot, info: new_snapshot_info)
+      let new_snapshot =
+        Snapshot(
+          ..new_snapshot,
+          info: titles.info_for_test(titles, new_snapshot.title)
+            |> option.from_result,
+        )
 
       let accepted_snapshot_path = to_accepted_path(new_snapshot_path)
       use accepted_snapshot <- result.try(read_accepted(accepted_snapshot_path))

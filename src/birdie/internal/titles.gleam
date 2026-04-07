@@ -15,19 +15,12 @@ pub opaque type Titles {
   Titles(
     /// All the birdie literal titles defined in the module. For example:
     /// `"This is a literal title"`
-    ///
     literals: Dict(String, TestInfo),
   )
 }
 
 pub type TestInfo {
   TestInfo(file: String, test_name: String)
-}
-
-/// A match you can get when looking for a title.
-///
-pub type Match {
-  LiteralMatch(info: TestInfo)
 }
 
 /// All the possible errors that can occur when gathering the titles from a
@@ -70,8 +63,11 @@ pub fn literals(titles: Titles) -> Dict(String, TestInfo) {
 
 // --- TITLE LOOKUP ------------------------------------------------------------
 
-pub fn find(titles: Titles, title title: String) -> Result(Match, Nil) {
-  result.map(dict.get(titles.literals, title), LiteralMatch)
+pub fn info_for_test(
+  titles: Titles,
+  titled title: String,
+) -> Result(TestInfo, Nil) {
+  dict.get(titles.literals, title)
 }
 
 // --- TITLE GATHERING ---------------------------------------------------------
@@ -109,10 +105,9 @@ pub fn from_module(
     // string.
     Ok(Literal(title:)) -> {
       let info = TestInfo(file: name, test_name: function.definition.name)
-      case find(titles, title) {
+      case info_for_test(titles, title) {
         Error(Nil) -> Ok(add_literal_title(titles, title, info))
-        Ok(LiteralMatch(other_info)) ->
-          Error(DuplicateLiteralTitles(title, info, other_info))
+        Ok(other_info) -> Error(DuplicateLiteralTitles(title, info, other_info))
       }
     }
 
