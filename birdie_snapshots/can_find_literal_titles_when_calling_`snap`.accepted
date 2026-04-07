@@ -1,5 +1,5 @@
 ---
-version: 1.2.5
+version: 1.5.4
 title: can find literal titles when calling `snap`
 file: ./test/titles_test.gleam
 test_name: can_find_literal_titles_when_calling_snap_test
@@ -16,5 +16,3 @@ with no labels                           [direct_call - my/module]
 with swapped labels                      [direct_call - my/module]
 without function capture and labelled content [in_pipeline_with_piped_title - my/module]
 without label                            [in_pipeline_with_piped_content - my/module]
-
---- PREFIXES ---

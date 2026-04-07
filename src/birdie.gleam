@@ -534,7 +534,7 @@ fn accept_snapshot(
     // We could find additional info about the test so we add it to the snapshot
     // before saving it! So we delete the `new` file and write an `accepted`
     // one with all the new info we found.
-    Ok(titles.Literal(info)) | Ok(titles.Prefix(info, _)) -> {
+    Ok(titles.LiteralMatch(info)) -> {
       let delete_new_snapshot =
         simplifile.delete(new_snapshot_path)
         |> result.map_error(CannotAcceptSnapshot(_, new_snapshot_path))
@@ -738,12 +738,6 @@ Snapshot titles " <> ansi.bold("must be unique") <> " or you would run into stra
 when reviewing them, try changing one of those.
 " <> location
     }
-
-    CannotGetTitles(titles.OverlappingPrefixes(..)) ->
-      panic as "Prefixes are not implemented yet"
-
-    CannotGetTitles(titles.PrefixOverlappingWithLiteralTitle(..)) ->
-      panic as "Prefixes are not implemented yet"
   }
 
   message
@@ -1208,7 +1202,7 @@ fn review_loop(
       // We need to add to the new test info about its location and the function
       // it's defined in.
       let new_snapshot_info = case titles.find(titles, new_snapshot.title) {
-        Ok(titles.Prefix(info:, ..)) | Ok(titles.Literal(info:)) -> Some(info)
+        Ok(titles.LiteralMatch(info:)) -> Some(info)
         Error(_) -> None
       }
       let new_snapshot = Snapshot(..new_snapshot, info: new_snapshot_info)
@@ -1448,7 +1442,11 @@ fn terminal_width() -> Int {
 /// Replaces the first occurrence of an element in the list with the given
 /// replacement.
 ///
-fn replace_first(in list: List(a), item item: a, with replacement: a) -> List(a) {
+fn replace_first(
+  in list: List(a),
+  item item: a,
+  with replacement: a,
+) -> List(a) {
   case list {
     [] -> []
     [first, ..rest] if first == item -> [replacement, ..rest]

@@ -94,12 +94,7 @@ fn pretty_titles(ts: titles.Titles) -> String {
     |> list.sort(string.compare)
     |> string.join(with: "\n")
 
-  let prefixes =
-    dict.to_list(titles.prefixes(ts))
-    |> list.map(fn(pair) { pretty(pair.0, pair.1) })
-    |> string.join(with: "\n")
-
-  "--- LITERALS ---\n" <> literals <> "\n\n--- PREFIXES ---\n" <> prefixes
+  "--- LITERALS ---\n" <> literals
 }
 
 pub fn can_find_literal_titles_when_calling_birdie_snap_test() {
