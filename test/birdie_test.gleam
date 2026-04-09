@@ -1,7 +1,4 @@
-// aèa
-
 import birdie
-import gleam/string
 import gleeunit
 
 pub fn main() {
@@ -9,11 +6,12 @@ pub fn main() {
 }
 
 pub fn hello_birdie_test() {
-  "🐦‍⬛" |> birdie.snap(title: "hello birdie test")
+  "🐦‍⬛ smile for the birdie!"
+  |> birdie.snap(title: "hello birdie test")
 }
 
 pub fn a_result_test() {
-  string.inspect(Ok(11))
+  "Ok(11)"
   |> birdie.snap(title: "a result test")
 }
 

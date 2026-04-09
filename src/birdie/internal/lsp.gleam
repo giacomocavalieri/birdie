@@ -5,6 +5,7 @@ import birdie/internal/position.{type Position, Position}
 import filepath
 import glance
 import gleam/bit_array
+import gleam/dict
 import gleam/dynamic/decode.{type Decoder, type Dynamic}
 import gleam/int
 import gleam/io
@@ -12,6 +13,7 @@ import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/result
+import gleam/set.{type Set}
 import gleam/string
 import gleam/uri.{type Uri}
 import justin
@@ -32,10 +34,25 @@ type RequestError {
 }
 
 type Server {
-  Server(reader: Reader, analyser: Analyser, shut_down: Bool, project_root: Uri)
+  Server(
+    reader: Reader,
+    analyser: Analyser,
+    modules_with_diagnostics: Set(Uri),
+    shut_down: Bool,
+    project_root: Uri,
+  )
 }
 
 pub fn start() {
+  io.println_error(
+    "Hello human!
+
+This command is intended to be run by language server clients such as a text
+editor rather than being run directly in the console.
+
+If you're running this yourself you might see strange errors pop up!
+",
+  )
   case initialise() {
     // In case we can't initialise we just close the connection to the client.
     Error(_) -> Nil
@@ -53,6 +70,7 @@ fn initialise() -> Result(Server, Error) {
       send_response(id, Initialised)
       Ok(Server(
         reader:,
+        modules_with_diagnostics: set.new(),
         analyser: analyser.new(),
         shut_down: False,
         project_root:,
@@ -97,7 +115,9 @@ fn handle_request(server: Server, request: Request) -> Server {
       let analyser =
         analyser.remove_module(server.analyser, path)
         |> analyser.analyse(analyser.Module(path:, source:))
+
       Server(..server, analyser:)
+      |> update_and_publish_diagnostics
     }
 
     // If a document is opened, we need to analyse it, the source is provided in
@@ -108,6 +128,7 @@ fn handle_request(server: Server, request: Request) -> Server {
         |> analyser.analyse(analyser.Module(path:, source:))
 
       Server(..server, analyser:)
+      |> update_and_publish_diagnostics
     }
 
     // If a document is closed we remove it from the cache, so we can keep
@@ -130,20 +151,33 @@ fn handle_request(server: Server, request: Request) -> Server {
         // as we can't figure out what name the snapshot file has :(
         Ok(#(
           line_numbers,
-          SnapshotTest(title: LiteralTitle(title), call_span:, ..),
+          SnapshotTest(title: LiteralTitle(title), call_span:, title_span:),
         )) -> {
-          case read_snapshot_content(server, title) {
-            Error(_) -> send_response(id, HoverResponse(None))
-            Ok(#(kind, content)) -> {
-              let heading = case kind {
-                New -> "*new snapshot*"
-                Accepted -> "*accepted snapshot*"
+          let has_duplicate_title =
+            list.find(analyser.errors(server.analyser), fn(error) {
+              case error {
+                analyser.TitleAlreadyInUse(title_span: span, ..) ->
+                  span == title_span
               }
-              let content = heading <> "\n```\n" <> content <> "```"
-              let range = span_to_range(line_numbers, call_span)
-              let result = HoverResponse(Some(#(range, content)))
-              send_response(id, result)
-            }
+            })
+            |> result.is_ok
+
+          case has_duplicate_title {
+            True -> send_response(id, HoverResponse(None))
+            False ->
+              case read_snapshot_content(server, title) {
+                Error(_) -> send_response(id, HoverResponse(None))
+                Ok(#(kind, content)) -> {
+                  let heading = case kind {
+                    New -> "*new snapshot*"
+                    Accepted -> "*accepted snapshot*"
+                  }
+                  let content = heading <> "\n```\n" <> content <> "```"
+                  let range = span_to_range(line_numbers, call_span)
+                  let result = HoverResponse(Some(#(range, content)))
+                  send_response(id, result)
+                }
+              }
           }
 
           server
@@ -470,52 +504,104 @@ fn position_to_json(position: Position) -> Json {
   ])
 }
 
-// ---- LSP NOTIFICATIONS ------------------------------------------------------
+// ---- LSP DIAGNOSTICS --------------------------------------------------------
 
-// type Notification {
-//   Log(level: LogLevel, message: String)
-// }
-//
-// type LogLevel {
-//   Info
-//   Erro
-// }
-//
-// fn log(level: LogLevel, message: String) -> Nil {
-//   Log(level:, message:)
-//   |> send_notification
-// }
-//
-// fn send_notification(notification: Notification) -> Nil {
-//   notification_to_json(notification)
-//   |> json.to_string
-//   |> encode_message
-//   |> io.print
-// }
-//
-// fn notification_to_json(notification: Notification) -> Json {
-//   let #(method, params) = case notification {
-//     Log(level:, message:) -> #(
-//       "window/logMessage",
-//       json.object([
-//         #("type", json.int(log_level_to_int(level))),
-//         #("message", json.string(message)),
-//       ]),
-//     )
-//   }
-//
-//   json.object([
-//     #("method", json.string(method)),
-//     #("params", params),
-//   ])
-// }
-//
-// fn log_level_to_int(level: LogLevel) -> Int {
-//   case level {
-//     Info -> 3
-//     Erro -> 1
-//   }
-// }
+type Diagnostic {
+  Diagnostic(document: Uri, range: Range, severity: Severity, message: String)
+}
+
+type Severity {
+  WarningSeverity
+  ErrorSeverity
+}
+
+fn update_and_publish_diagnostics(server: Server) -> Server {
+  let diagnostics_by_module =
+    list.append(
+      analyser.warnings(server.analyser)
+        |> list.map(warning_to_diagnostic),
+      analyser.errors(server.analyser)
+        |> list.map(error_to_diagnostic),
+    )
+    |> list.group(fn(diagnostic) { diagnostic.document })
+
+  let modules_that_no_longer_have_diagnostics =
+    set.filter(server.modules_with_diagnostics, keeping: fn(module) {
+      !dict.has_key(diagnostics_by_module, module)
+    })
+
+  diagnostics_by_module
+  |> dict.each(fn(module, warnings) { send_diagnostics(module, warnings) })
+  modules_that_no_longer_have_diagnostics
+  |> set.each(fn(module) { send_diagnostics(module, []) })
+
+  let modules_with_diagnostics =
+    dict.keys(diagnostics_by_module)
+    |> set.from_list
+
+  Server(..server, modules_with_diagnostics:)
+}
+
+fn warning_to_diagnostic(warning: analyser.Warning) -> Diagnostic {
+  case warning {
+    analyser.NonLiteralTitle(module:, title_span:) ->
+      Diagnostic(
+        document: module.path,
+        range: span_to_range(module.line_numbers, title_span),
+        severity: WarningSeverity,
+        message: "Non literal snapshot title
+A snapshot title should always be a literal string describing your expectations.
+It is considered an anti pattern to use expressions for snapshot titles.",
+      )
+  }
+}
+
+fn error_to_diagnostic(error: analyser.Error) -> Diagnostic {
+  case error {
+    analyser.TitleAlreadyInUse(module:, title_span:) ->
+      Diagnostic(
+        document: module.path,
+        range: span_to_range(module.line_numbers, title_span),
+        severity: ErrorSeverity,
+        message: "Duplicate snapshot title
+This title has already been used for another snapshot, this would result in confusing failures when reviewing snapshots.
+Hint: change this title so it's unique.",
+      )
+  }
+}
+
+fn send_diagnostics(document: Uri, diagnostics: List(Diagnostic)) -> Nil {
+  diagnostics_to_json(document, diagnostics)
+  |> json.to_string
+  |> encode_message
+  |> io.print
+}
+
+fn diagnostics_to_json(document: Uri, diagnostics: List(Diagnostic)) -> Json {
+  json.object([
+    #("jsonrpc", json.string("2.0")),
+    #("method", json.string("textDocument/publishDiagnostics")),
+    #(
+      "params",
+      json.object([
+        #("uri", json.string(uri.to_string(document))),
+        #("diagnostics", json.array(diagnostics, diagnostic_to_json)),
+      ]),
+    ),
+  ])
+}
+
+fn diagnostic_to_json(diagnostic: Diagnostic) -> Json {
+  let Diagnostic(document: _, range:, severity:, message:) = diagnostic
+  json.object([
+    #("range", range_to_json(range)),
+    #("message", json.string(message)),
+    #("severity", case severity {
+      ErrorSeverity -> json.int(1)
+      WarningSeverity -> json.int(2)
+    }),
+  ])
+}
 
 // ---- FFI FOR READING STDIN --------------------------------------------------
 

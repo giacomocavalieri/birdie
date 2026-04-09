@@ -5,6 +5,7 @@ import gleam/dict.{type Dict}
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/result
+import gleam/set.{type Set}
 import gleam/uri.{type Uri}
 
 pub opaque type Analyser {
@@ -14,23 +15,23 @@ pub opaque type Analyser {
     /// A dictionary from snapshot literal title to a dictionary mapping from
     /// modules to locations in that module where the title is used.
     /// This keeps track of where each title is used!
-    literal_titles: Dict(String, Dict(Uri, List(Span))),
+    literal_titles: Dict(String, Dict(Uri, Set(Span))),
   )
 }
 
 pub type Error {
-  NameAlreadyInUse(title_span: Span)
+  TitleAlreadyInUse(module: AnalysedModule, title_span: Span)
 }
 
 pub type Warning {
-  NonLiteralName
+  NonLiteralTitle(module: AnalysedModule, title_span: Span)
 }
 
 pub type Module {
   Module(path: Uri, source: String)
 }
 
-type AnalysedModule {
+pub type AnalysedModule {
   AnalysedModule(path: Uri, snapshots: List(SnapshotTest), line_numbers: Map)
 }
 
@@ -106,8 +107,8 @@ pub fn remove_module(analyser: Analyser, module: Uri) -> Analyser {
 fn remove_snapshot_title(
   snapshot: SnapshotTest,
   in module: AnalysedModule,
-  from names: Dict(String, Dict(Uri, List(Span))),
-) -> Dict(String, Dict(Uri, List(Span))) {
+  from names: Dict(String, Dict(Uri, Set(Span))),
+) -> Dict(String, Dict(Uri, Set(Span))) {
   case snapshot.title {
     // If the snapshot doesn't have a literal title then it can't be part of the
     // names, we just skip it!
@@ -125,11 +126,36 @@ fn remove_snapshot_title(
 }
 
 pub fn errors(analyser: Analyser) -> List(Error) {
-  todo
+  dict.fold(analyser.literal_titles, [], fn(acc, _title, references) {
+    let errors =
+      dict.fold(references, [], fn(acc, module, references) {
+        set.fold(references, acc, fn(acc, reference) {
+          case dict.get(analyser.modules, module) {
+            Ok(module) -> [TitleAlreadyInUse(module, reference), ..acc]
+            Error(_) -> acc
+          }
+        })
+      })
+
+    case errors {
+      [] | [_] -> acc
+      [_, _, ..] -> errors |> list.append(acc)
+    }
+  })
 }
 
 pub fn warnings(analyser: Analyser) -> List(Warning) {
-  todo
+  dict.fold(analyser.modules, [], fn(acc, _, module) {
+    list.fold(module.snapshots, acc, fn(acc, snapshot) {
+      case snapshot.title {
+        LiteralTitle(_) -> acc
+        ExpressionTitle -> [
+          NonLiteralTitle(module:, title_span: snapshot.title_span),
+          ..acc
+        ]
+      }
+    })
+  })
 }
 
 pub fn find_test(
@@ -174,7 +200,10 @@ fn add_analysed_module(analyser: Analyser, module: AnalysedModule) -> Analyser {
       case title {
         ExpressionTitle -> literal_titles
         LiteralTitle(title:) -> {
-          let spans = list.map(snapshots, fn(snapshot) { snapshot.call_span })
+          let spans =
+            list.map(snapshots, fn(snapshot) { snapshot.title_span })
+            |> set.from_list
+
           dict.upsert(literal_titles, title, fn(references) {
             case references {
               None -> dict.from_list([#(module.path, spans)])
@@ -206,8 +235,11 @@ fn analyse_module(module: Module) -> Result(AnalysedModule, Nil) {
   let snapshots = {
     use snapshots, function <- list.fold(parsed_module.functions, [])
     let body = function.definition.body
-    use snapshots, expression <- fold_statements(body, snapshots)
-    case snapshot_test(snap_usage, expression) {
+
+    // Each function has a new empty scope.
+    let scope = Scope(set.new())
+    use snapshots, scope, expression <- fold_statements(body, scope, snapshots)
+    case snapshot_test(snap_usage, scope, expression) {
       Ok(snapshot) -> [snapshot, ..snapshots]
       Error(_) -> snapshots
     }
@@ -226,6 +258,7 @@ fn analyse_module(module: Module) -> Result(AnalysedModule, Nil) {
 
 fn snapshot_test(
   snap_usage: SnapUsage,
+  scope: Scope,
   expression: glance.Expression,
 ) -> Result(SnapshotTest, Nil) {
   case expression {
@@ -360,7 +393,7 @@ fn snapshot_test(
       // Most of the work is done, we have captured all calls that _look like_
       // they might be a call to `birdie.snap`, but now we need to make sure
       // they actually are!
-      case is_snap_function(function, snap_usage) {
+      case is_snap_function(function, scope, snap_usage) {
         False -> Error(Nil)
         True ->
           Ok(SnapshotTest(
@@ -372,7 +405,7 @@ fn snapshot_test(
 
     // Echo trivially wraps an expression, so we need to check that!
     glance.Echo(expression: Some(expression), ..) ->
-      snapshot_test(snap_usage, expression)
+      snapshot_test(snap_usage, scope, expression)
 
     // Everything else cannot be a call to `birdie.snap` (or it is a format
     // I've forgot about).
@@ -406,31 +439,34 @@ fn expression_to_title(title: glance.Expression) -> SnapshotTitle {
 /// the function can be used.
 fn is_snap_function(
   function: glance.Expression,
+  scope: Scope,
   snap_usage: SnapUsage,
 ) -> Bool {
   case function {
     // We have an unqualified call: `name(content, title)`.
     // We must check that the name used is the name that was picked for the
     // unqualified birdie import.
-    glance.Variable(name:, ..) ->
+    glance.Variable(name: used_snap_name, ..) ->
       case snap_usage {
         OnlyQualified(..) -> False
         QualifiedAndUnqualified(snap_name:, ..) | OnlyUnqualified(snap_name:) ->
-          snap_name == name
+          snap_name == used_snap_name
+          && !set.contains(scope.variables, snap_name)
       }
 
     // We have a qualified call: `module_name.snap(content, title)`.
     // We must check that the name used is the name that was picked for the
     // birdie module when imported.
     glance.FieldAccess(
-      container: glance.Variable(name: module_name, ..),
+      container: glance.Variable(name: used_module_name, ..),
       label: "snap",
       ..,
     ) ->
       case snap_usage {
         OnlyUnqualified(..) -> False
         OnlyQualified(birdie_name:) | QualifiedAndUnqualified(birdie_name:, ..) ->
-          module_name == birdie_name
+          used_module_name == birdie_name
+          && !set.contains(scope.variables, birdie_name)
       }
 
     _ -> False
@@ -530,156 +566,183 @@ fn snap_usage(for module: glance.Module) -> Result(SnapUsage, Nil) {
 
 // ---- GLANCE EXPRESSION FOLDING ----------------------------------------------
 
+type Scope {
+  Scope(variables: Set(String))
+}
+
 fn fold_statements(
   statements: List(glance.Statement),
+  scope: Scope,
   acc: a,
-  fun: fn(a, glance.Expression) -> a,
+  fun: fn(a, Scope, glance.Expression) -> a,
 ) -> a {
-  use acc, statement <- list.fold(over: statements, from: acc)
-  case statement {
-    glance.Use(location: _, patterns: _, function: expression)
-    | glance.Assert(location: _, expression:, message: None)
-    | glance.Assignment(
-        location: _,
-        kind: _,
-        pattern: _,
-        annotation: _,
-        value: expression,
-      )
-    | glance.Expression(expression) -> fold_expression(expression, acc, fun)
+  let #(_scope, acc) =
+    list.fold(over: statements, from: #(scope, acc), with: fn(acc, statement) {
+      let #(scope, acc) = acc
+      case statement {
+        // A use expression can introduce new variables into scope.
+        glance.Use(patterns:, function:, ..) -> {
+          // The function on the right hand side of use doesn't see the variable
+          // that it introduces, so we have to go over it before updating the
+          // scope.
+          let acc = fold_expression(function, scope, acc, fun)
+          let scope =
+            list.fold(patterns, scope, fn(scope, use_pattern) {
+              update_scope_from_patterns(scope, [use_pattern.pattern])
+            })
+          #(scope, acc)
+        }
 
-    glance.Assert(location: _, expression:, message: Some(message)) -> {
-      let acc = fold_expression(expression, acc, fun)
-      fold_expression(message, acc, fun)
-    }
-  }
+        // An assignment can introduce variables into scope.
+        glance.Assignment(pattern:, value:, ..) -> {
+          // The value on the right hand side of the assignment doesn't see the
+          // variable that it introduces, so we have to go over it before
+          // updating the scope.
+          let acc = fold_expression(value, scope, acc, fun)
+          let scope = update_scope_from_patterns(scope, [pattern])
+          #(scope, acc)
+        }
+
+        // Assertions and simple expression cannot introduce new variables in
+        // the current scope!
+        glance.Assert(location: _, expression:, message: None) -> {
+          #(scope, fold_expression(expression, scope, acc, fun))
+        }
+        glance.Assert(location: _, expression:, message: Some(message)) -> {
+          let acc = fold_expression(expression, scope, acc, fun)
+          #(scope, fold_expression(message, scope, acc, fun))
+        }
+        glance.Expression(expression) -> {
+          #(scope, fold_expression(expression, scope, acc, fun))
+        }
+      }
+    })
+
+  acc
 }
 
 fn fold_expression(
   expression: glance.Expression,
+  scope: Scope,
   acc: a,
-  fun: fn(a, glance.Expression) -> a,
+  fun: fn(a, Scope, glance.Expression) -> a,
 ) -> a {
-  let acc = fun(acc, expression)
+  let acc = fun(acc, scope, expression)
   case expression {
-    glance.Echo(expression: Some(expression), message: None, location: _)
-    | glance.Echo(expression: None, message: Some(expression), location: _) ->
-      fold_expression(expression, acc, fun)
-    glance.Echo(
-      expression: Some(expression),
-      message: Some(message),
-      location: _,
-    ) -> {
-      let acc = fold_expression(expression, acc, fun)
-      fold_expression(message, acc, fun)
+    glance.Echo(expression: Some(expression), message: None, ..)
+    | glance.Echo(expression: None, message: Some(expression), ..) ->
+      fold_expression(expression, scope, acc, fun)
+    glance.Echo(expression: Some(expression), message: Some(message), ..) -> {
+      let acc = fold_expression(expression, scope, acc, fun)
+      fold_expression(message, scope, acc, fun)
     }
 
-    glance.NegateInt(value: expression, location: _)
-    | glance.NegateBool(value: expression, location: _)
-    | glance.FieldAccess(container: expression, location: _, label: _)
-    | glance.TupleIndex(tuple: expression, location: _, index: _) ->
-      fold_expression(expression, acc, fun)
+    glance.NegateInt(value: expression, ..)
+    | glance.NegateBool(value: expression, ..)
+    | glance.FieldAccess(container: expression, ..)
+    | glance.TupleIndex(tuple: expression, ..) ->
+      fold_expression(expression, scope, acc, fun)
 
-    glance.Block(statements:, location: _) ->
-      fold_statements(statements, acc, fun)
+    glance.Block(statements:, ..) ->
+      fold_statements(statements, scope, acc, fun)
 
-    glance.Tuple(elements:, location: _)
-    | glance.List(elements:, rest: None, location: _) ->
-      fold_expressions(elements, acc, fun)
+    glance.Tuple(elements:, ..) | glance.List(elements:, rest: None, ..) ->
+      fold_expressions(elements, scope, acc, fun)
 
-    glance.List(elements:, rest: Some(rest), location: _) -> {
-      let acc = fold_expressions(elements, acc, fun)
-      fold_expression(rest, acc, fun)
+    glance.List(elements:, rest: Some(rest), ..) -> {
+      let acc = fold_expressions(elements, scope, acc, fun)
+      fold_expression(rest, scope, acc, fun)
     }
 
-    glance.Fn(body: statements, location: _, arguments: _, return_annotation: _) ->
-      fold_statements(statements, acc, fun)
+    glance.Fn(body: statements, arguments:, ..) -> {
+      let scope =
+        list.fold(arguments, scope, fn(scope, argument) {
+          case argument.name {
+            glance.Discarded(_) -> scope
+            glance.Named(name) -> Scope(set.insert(scope.variables, name))
+          }
+        })
+      fold_statements(statements, scope, acc, fun)
+    }
 
-    glance.RecordUpdate(
-      record:,
-      fields:,
-      location: _,
-      module: _,
-      constructor: _,
-    ) -> {
-      let acc = fold_expression(record, acc, fun)
+    glance.RecordUpdate(record:, fields:, ..) -> {
+      let acc = fold_expression(record, scope, acc, fun)
       list.fold(over: fields, from: acc, with: fn(acc, field) {
         case field.item {
-          Some(item) -> fold_expression(item, acc, fun)
+          Some(item) -> fold_expression(item, scope, acc, fun)
           None -> acc
         }
       })
     }
 
-    glance.Call(function:, arguments:, location: _) -> {
-      let acc = fold_expression(function, acc, fun)
-      fold_fields(arguments, acc, fun)
+    glance.Call(function:, arguments:, ..) -> {
+      let acc = fold_expression(function, scope, acc, fun)
+      fold_fields(arguments, scope, acc, fun)
     }
 
-    glance.FnCapture(
-      function:,
-      arguments_before:,
-      arguments_after:,
-      location: _,
-      label: _,
-    ) -> {
-      let acc = fold_expression(function, acc, fun)
-      let acc = fold_fields(arguments_before, acc, fun)
-      fold_fields(arguments_after, acc, fun)
+    glance.FnCapture(function:, arguments_before:, arguments_after:, ..) -> {
+      let acc = fold_expression(function, scope, acc, fun)
+      let acc = fold_fields(arguments_before, scope, acc, fun)
+      fold_fields(arguments_after, scope, acc, fun)
     }
 
-    glance.Case(subjects:, clauses:, location: _) -> {
-      let acc = fold_expressions(subjects, acc, fun)
-      fold_clauses(clauses, acc, fun)
+    glance.Case(subjects:, clauses:, ..) -> {
+      let acc = fold_expressions(subjects, scope, acc, fun)
+      fold_clauses(clauses, scope, acc, fun)
     }
 
-    glance.BinaryOperator(left:, right:, location: _, name: _) -> {
-      let acc = fold_expression(left, acc, fun)
-      fold_expression(right, acc, fun)
+    glance.BinaryOperator(left:, right:, ..) -> {
+      let acc = fold_expression(left, scope, acc, fun)
+      fold_expression(right, scope, acc, fun)
     }
 
-    glance.Panic(message: Some(expression), location: _)
-    | glance.Todo(message: Some(expression), location: _) ->
-      fold_expression(expression, acc, fun)
+    glance.Panic(message: Some(expression), ..)
+    | glance.Todo(message: Some(expression), ..) ->
+      fold_expression(expression, scope, acc, fun)
 
     // We can't find any `birdie.snap` call here for sure.
-    glance.Panic(message: None, location: _)
-    | glance.Todo(message: None, location: _)
+    glance.Panic(message: None, ..)
+    | glance.Todo(message: None, ..)
     | glance.BitString(..)
     | glance.Int(..)
     | glance.Float(..)
     | glance.String(..)
     | glance.Variable(..)
-    | glance.Echo(expression: None, message: None, location: _) -> acc
+    | glance.Echo(expression: None, message: None, ..) -> acc
   }
 }
 
 fn fold_fields(
   fields: List(glance.Field(glance.Expression)),
+  scope: Scope,
   acc: a,
-  fun: fn(a, glance.Expression) -> a,
+  fun: fn(a, Scope, glance.Expression) -> a,
 ) -> a {
   list.fold(over: fields, from: acc, with: fn(acc, field) {
     case field {
-      glance.LabelledField(label: _, label_location: _, item:)
-      | glance.UnlabelledField(item:) -> fold_expression(item, acc, fun)
-      glance.ShorthandField(label: _, location: _) -> acc
+      glance.LabelledField(item:, ..) | glance.UnlabelledField(item:) ->
+        fold_expression(item, scope, acc, fun)
+      glance.ShorthandField(..) -> acc
     }
   })
 }
 
 fn fold_clauses(
   clauses: List(glance.Clause),
+  scope: Scope,
   acc: a,
-  fun: fn(a, glance.Expression) -> a,
+  fun: fn(a, Scope, glance.Expression) -> a,
 ) -> a {
   list.fold(over: clauses, from: acc, with: fn(acc, clause) {
     case clause {
-      glance.Clause(patterns: _, guard: None, body:) ->
-        fold_expression(body, acc, fun)
-      glance.Clause(patterns: _, guard: Some(guard), body:) -> {
-        let acc = fold_expression(guard, acc, fun)
-        fold_expression(body, acc, fun)
+      glance.Clause(patterns:, guard: None, body:) -> {
+        let scope = list.fold(patterns, scope, update_scope_from_patterns)
+        fold_expression(body, scope, acc, fun)
+      }
+      glance.Clause(patterns:, guard: Some(guard), body:) -> {
+        let scope = list.fold(patterns, scope, update_scope_from_patterns)
+        let acc = fold_expression(guard, scope, acc, fun)
+        fold_expression(body, scope, acc, fun)
       }
     }
   })
@@ -687,10 +750,68 @@ fn fold_clauses(
 
 fn fold_expressions(
   expressions: List(glance.Expression),
+  scope: Scope,
   acc: a,
-  fun: fn(a, glance.Expression) -> a,
+  fun: fn(a, Scope, glance.Expression) -> a,
 ) -> a {
   list.fold(expressions, acc, fn(acc, expression) {
-    fold_expression(expression, acc, fun)
+    fold_expression(expression, scope, acc, fun)
   })
+}
+
+fn update_scope_from_patterns(
+  scope: Scope,
+  patterns: List(glance.Pattern),
+) -> Scope {
+  Scope(list.fold(patterns, scope.variables, pattern_variables))
+}
+
+fn pattern_variables(acc: Set(String), pattern: glance.Pattern) -> Set(String) {
+  case pattern {
+    glance.PatternInt(..) -> acc
+    glance.PatternFloat(..) -> acc
+    glance.PatternString(..) -> acc
+    glance.PatternDiscard(..) -> acc
+    glance.PatternVariable(name:, ..) -> set.insert(acc, name)
+
+    glance.PatternTuple(elements:, ..) ->
+      list.fold(elements, acc, pattern_variables)
+
+    glance.PatternList(elements:, tail: None, ..) ->
+      list.fold(elements, acc, pattern_variables)
+    glance.PatternList(elements:, tail: Some(tail), ..) -> {
+      let acc = list.fold(elements, acc, pattern_variables)
+      pattern_variables(acc, tail)
+    }
+
+    glance.PatternAssignment(pattern:, name:, ..) -> {
+      let acc = set.insert(acc, name)
+      pattern_variables(acc, pattern)
+    }
+
+    glance.PatternConcatenate(prefix_name:, rest_name:, ..) -> {
+      let acc = case prefix_name {
+        Some(glance.Discarded(_)) | None -> acc
+        Some(glance.Named(name)) -> set.insert(acc, name)
+      }
+      case rest_name {
+        glance.Named(name) -> set.insert(acc, name)
+        glance.Discarded(_) -> acc
+      }
+    }
+
+    glance.PatternBitString(segments:, ..) ->
+      list.fold(segments, acc, fn(acc, segment) {
+        pattern_variables(acc, segment.0)
+      })
+
+    glance.PatternVariant(arguments:, ..) ->
+      list.fold(arguments, acc, fn(acc, argument) {
+        case argument {
+          glance.ShorthandField(label:, ..) -> set.insert(acc, label)
+          glance.LabelledField(item:, ..) | glance.UnlabelledField(item:) ->
+            pattern_variables(acc, item)
+        }
+      })
+  }
 }
