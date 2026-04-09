@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.6.0-rc1 - 2026-04-09
+
+- The CLI now has an `lsp` option to be used by editors to provide language
+  server capabilities.
+- The birdie language server now raises an error when it can detect duplicate
+  titles used for multiple snapshots.
+- The birdie language server now raises a warning when it can detect titles that
+  are not literal strings.
+
 ## 1.5.4 - 2026-01-28
 
 - Improved the error message birdie produces when it can't open the temporary
