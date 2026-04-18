@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.5 - 2026-04-18
+
+- Updated the `gleam_stdlib` constraint to allow using `v1.0.0`!
+
 ## 1.5.4 - 2026-01-28
 
 - Improved the error message birdie produces when it can't open the temporary

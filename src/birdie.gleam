@@ -25,7 +25,7 @@ import rank
 import simplifile.{Eexist, Enoent}
 import term_size
 
-const birdie_version = "1.5.4"
+const birdie_version = "1.5.5"
 
 const hint_review_message = "run `gleam run -m birdie` to review the snapshots"
 
@@ -1448,7 +1448,11 @@ fn terminal_width() -> Int {
 /// Replaces the first occurrence of an element in the list with the given
 /// replacement.
 ///
-fn replace_first(in list: List(a), item item: a, with replacement: a) -> List(a) {
+fn replace_first(
+  in list: List(a),
+  item item: a,
+  with replacement: a,
+) -> List(a) {
   case list {
     [] -> []
     [first, ..rest] if first == item -> [replacement, ..rest]
