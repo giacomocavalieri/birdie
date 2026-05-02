@@ -1,0 +1,13 @@
+---
+version: 1.5.5
+title: multi line diagnostic
+file: file:./test/birdie_test/diagnostic_test.gleam
+test_name: multi_line_diagnostic_test
+---
+[1m[31merror[39m: example[22m
+ [2m ╭─ [22mwibble.src
+ [2m │[22m
+[2m1 │ [22mline [31mhere[39m
+[2m2 │ [22m[31mhere[39m
+ [2m │[22m [31m^[39m[31m^[39m[31m^[39m[31m^[39m[31m^[39m[31m^[39m[31m^[39m[31m^[39m[31m^[39m [31mmessage[39m
+ [2m │[22m

@@ -1,0 +1,14 @@
+---
+version: 1.5.5
+title: single line diagnostic with secondary label right below
+file: file:./test/birdie_test/diagnostic_test.gleam
+test_name: single_line_diagnostic_with_secondary_label_right_below_test
+---
+[1m[33mwarning[39m: example[22m
+ [2m ╭─ [22mwibble.src
+ [2m │[22m
+[2m1 │ [22m[33mmain[39m
+ [2m │[22m [33m^[39m[33m^[39m[33m^[39m[33m^[39m [33mprimary[39m
+[2m2 │ [22msecondary [2mhere[22m
+ [2m │[22m           [2m~[22m[2m~[22m[2m~[22m[2m~[22m [2msecondary[22m
+ [2m │[22m

@@ -1,0 +1,12 @@
+---
+version: 1.5.5
+title: single line diagnostic with tooltip text
+file: file:./test/birdie_test/diagnostic_test.gleam
+test_name: single_line_diagnostic_with_tooltip_text_test
+---
+[1m[31merror[39m: example[22m
+ [2m ╭─ [22mwibble.src
+ [2m │[22m
+[2m1 │ [22m[31mhighlighted[39m-not-highlighted
+ [2m │[22m [31m^[39m[31m^[39m[31m^[39m[31m^[39m[31m^[39m[31m^[39m[31m^[39m[31m^[39m[31m^[39m[31m^[39m[31m^[39m [31mnot good[39m
+ [2m │[22m

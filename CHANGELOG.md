@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.6.0 - unreleased
+
+- The look of birdie's error messages has been improved.
+
 ## 1.5.5 - 2026-04-18
 
 - Updated the `gleam_stdlib` constraint to allow using `v1.0.0`!

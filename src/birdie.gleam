@@ -1,15 +1,17 @@
 import argv
+import birdie/internal/analyser.{type Analyser}
 import birdie/internal/cli.{
   type Command, Accept, CheckStale, DeleteStale, FullCommand, Help,
   MissingSubcommand, Reject, Review, Stale, UnexpectedArgument, UnknownCommand,
   UnknownOption, UnknownSubcommand, WithHelpOption,
 }
+import birdie/internal/diagnostic
 import birdie/internal/diff.{type DiffLine, DiffLine}
 import birdie/internal/project
-import birdie/internal/titles
 import birdie/internal/version
 import envoy
 import filepath
+import gleam/bool
 import gleam/int
 import gleam/io
 import gleam/list
@@ -18,6 +20,7 @@ import gleam/order
 import gleam/result
 import gleam/set
 import gleam/string
+import gleam/uri
 import gleam_community/ansi
 import global_value
 import justin
@@ -72,8 +75,18 @@ type Error {
 
   MissingReferencedFile
 
-  CannotGetTitles(reason: titles.Error)
+  /// This happens when we try and list all the files inside the `test/`
+  /// directory and for some reason the operation fails.
+  CannotReadTestDirectory(reason: simplifile.FileError)
+
+  /// This happens when we're trying to read the content of a test file to then
+  /// analyse it, but the operation fails for some reason.
+  CannotReadTestFile(reason: simplifile.FileError, file: String)
+
   CannotFigureOutProjectName(reason: simplifile.FileError)
+
+  /// This happens if there's any analysis error with the project modules.
+  AnalysisError(errors: List(analyser.Error))
 }
 
 // --- THE SNAPSHOT TYPE -------------------------------------------------------
@@ -83,7 +96,24 @@ type New
 type Accepted
 
 type Snapshot(status) {
-  Snapshot(title: String, content: String, info: Option(titles.TestInfo))
+  Snapshot(title: String, content: String, info: Option(SnapshotInfo))
+}
+
+type SnapshotInfo {
+  SnapshotInfo(
+    /// The path to the file where the snapshot is defined.
+    file: String,
+    /// The name of the function inside of which the snapshot test is defined.
+    /// For example:
+    ///
+    /// ```gleam
+    /// pub fn wibble_test() {
+    ///   //   ^^^^^^^^^^^ This!
+    ///   birdie.snap(...)
+    /// }
+    /// ```
+    test_function_name: String,
+  )
 }
 
 // --- SNAP --------------------------------------------------------------------
@@ -193,10 +223,13 @@ pub fn snap(content content: String, title title: String) -> Nil {
       panic as "Birdie snapshot test failed"
     }
 
-    Error(error) -> {
-      let panic_message = "Birdie snapshot test failed\n" <> explain(error)
-      panic as panic_message
-    }
+    Error(error) ->
+      panic as {
+        "Birdie snapshot test failed\n"
+        <> to_diagnostic(error)
+        |> list.map(diagnostic.to_string)
+        |> string.join(with: "\n\n")
+      }
   }
 }
 
@@ -348,9 +381,9 @@ fn deserialise(raw: String) -> Result(Snapshot(a), Nil) {
           Ok(Snapshot(
             title: string.trim(title),
             content: trim_content(content, based_on: version),
-            info: Some(titles.TestInfo(
+            info: Some(SnapshotInfo(
               file: string.trim(file),
-              test_name: string.trim(test_name),
+              test_function_name: string.trim(test_name),
             )),
           ))
 
@@ -382,9 +415,9 @@ fn serialise(snapshot: Snapshot(New)) -> String {
   let Snapshot(title:, content:, info:) = snapshot
   let info_lines = case info {
     None -> []
-    Some(titles.TestInfo(file:, test_name:)) -> [
+    Some(SnapshotInfo(file:, test_function_name:)) -> [
       "file: " <> file,
-      "test_name: " <> test_name,
+      "test_name: " <> test_function_name,
     ]
   }
 
@@ -502,7 +535,7 @@ fn list_accepted_snapshots(in folder: String) -> Result(List(String), Error) {
 
 fn accept_snapshot(
   new_snapshot_path: String,
-  titles: titles.Titles,
+  analyser: Analyser,
 ) -> Result(Nil, Error) {
   use snapshot <- result.try(read_new(new_snapshot_path))
   let Snapshot(title:, content:, info: _) = snapshot
@@ -530,15 +563,15 @@ fn accept_snapshot(
     |> result.map_error(CannotMarkSnapshotAsReferenced),
   )
 
-  case titles.find(titles, title) {
+  case get_info_for_snapshot(analyser, titled: title) {
     // We could find additional info about the test so we add it to the snapshot
     // before saving it! So we delete the `new` file and write an `accepted`
     // one with all the new info we found.
-    Ok(titles.Literal(info)) | Ok(titles.Prefix(info, _)) -> {
-      let delete_new_snapshot =
+    Ok(info) -> {
+      use _ <- result.try(
         simplifile.delete(new_snapshot_path)
-        |> result.map_error(CannotAcceptSnapshot(_, new_snapshot_path))
-      use _ <- result.try(delete_new_snapshot)
+        |> result.map_error(CannotAcceptSnapshot(_, new_snapshot_path)),
+      )
 
       Snapshot(title:, content:, info: Some(info))
       |> serialise
@@ -546,9 +579,11 @@ fn accept_snapshot(
       |> result.map_error(CannotAcceptSnapshot(_, accepted_snapshot_path))
     }
 
+    // If there's no snapshot with this title, or there's multiple ones (that's
+    // an error!) we don't have any way of linking additional information to
+    // this snapshot test.
+    // So we can just move the `new` snapshot to the `accepted` one.
     Error(_) ->
-      // Birdie couldn't find any additional info about the given test, so
-      // we can just move the `new` snapshot to the `accepted` one.
       simplifile.rename(new_snapshot_path, accepted_snapshot_path)
       |> result.map_error(CannotAcceptSnapshot(_, new_snapshot_path))
   }
@@ -591,95 +626,182 @@ fn to_accepted_path(file: String) -> String {
 
 // --- PRETTY PRINTING ---------------------------------------------------------
 
-fn explain(error: Error) -> String {
-  let heading = fn(reason: simplifile.FileError) {
-    "[" <> ansi.bold(string.inspect(reason)) <> "] "
+fn to_diagnostic(error: Error) -> List(diagnostic.Diagnostic) {
+  // Produces a diagnostic with no label and an error level
+  let error_diagnostic = fn(title, text) {
+    [
+      diagnostic.Diagnostic(
+        level: diagnostic.Erro,
+        label: None,
+        hint: None,
+        title:,
+        text:,
+      ),
+    ]
   }
 
-  let message = case error {
+  case error {
     SnapshotWithEmptyTitle ->
-      "a snapshot cannot have the empty string as a title."
+      error_diagnostic(
+        "snapshot with empty title",
+        "A snapshot cannot have an empty title.",
+      )
 
     CannotCreateSnapshotsFolder(reason:) ->
-      heading(reason) <> "I couldn't create the snapshots folder."
+      error_diagnostic(
+        "cannot create snapshot folder",
+        "An unexpected error happened: "
+          <> simplifile.describe_error(reason)
+          <> ".",
+      )
 
     CannotReadAcceptedSnapshot(reason:, source:) ->
-      heading(reason)
-      <> "I couldn't read the accepted snapshot from "
-      <> ansi.italic("\"" <> source <> "\".")
+      error_diagnostic(
+        "cannot read accepted snapshot",
+        "An unexpected error happened trying to read "
+          <> ansi.italic("\"" <> source <> "\":")
+          <> " "
+          <> simplifile.describe_error(reason)
+          <> ".",
+      )
 
     CannotReadNewSnapshot(reason:, source:) ->
-      heading(reason)
-      <> "I couldn't read the new snapshot from "
-      <> ansi.italic("\"" <> source <> "\".")
+      error_diagnostic(
+        "cannot read new snapshot",
+        "An unexpected error happened trying to read "
+          <> ansi.italic("\"" <> source <> "\": ")
+          <> simplifile.describe_error(reason)
+          <> ".",
+      )
 
     CannotSaveNewSnapshot(reason:, title:, destination:) ->
-      heading(reason)
-      <> "I couldn't save the snapshot "
-      <> ansi.italic("\"" <> title <> "\" ")
-      <> "to "
-      <> ansi.italic("\"" <> destination <> "\".")
+      error_diagnostic(
+        "cannot save new snapshot",
+        "An unexpected error happened trying to save "
+          <> ansi.italic("\"" <> title <> "\"")
+          <> " to "
+          <> ansi.italic("\"" <> destination <> "\": ")
+          <> simplifile.describe_error(reason)
+          <> ".",
+      )
 
     CannotReadSnapshots(reason:, folder: _) ->
-      heading(reason) <> "I couldn't read the snapshots folder's contents."
+      error_diagnostic(
+        "cannot read snapshots folder",
+        "An unexpected error happened trying to read the snapshots folder: "
+          <> simplifile.describe_error(reason)
+          <> ".",
+      )
 
     CannotRejectSnapshot(reason:, snapshot:) ->
-      heading(reason)
-      <> "I couldn't reject the snapshot "
-      <> ansi.italic("\"" <> snapshot <> "\".")
+      error_diagnostic(
+        "cannot reject snapshot",
+        "An unexpected error happened trying to reject "
+          <> ansi.italic("\"" <> snapshot <> "\": ")
+          <> simplifile.describe_error(reason)
+          <> ".",
+      )
 
     CannotAcceptSnapshot(reason:, snapshot:) ->
-      heading(reason)
-      <> "I couldn't accept the snapshot "
-      <> ansi.italic("\"" <> snapshot <> "\".")
+      error_diagnostic(
+        "cannot accept snapshot",
+        "An unexpected error happened trying to accept "
+          <> ansi.italic("\"" <> snapshot <> "\": ")
+          <> simplifile.describe_error(reason)
+          <> ".",
+      )
 
-    CannotReadUserInput -> "I couldn't read the user input."
+    CannotReadUserInput -> error_diagnostic("cannot read user input", "")
 
-    CorruptedSnapshot(source:) ->
-      "It looks like "
-      <> ansi.italic("\"" <> source <> "\"\n")
-      <> "is not a valid snapshot.\n"
-      <> "This might happen when someone modifies its content.\n"
-      <> "Try deleting the snapshot and recreating it."
+    CorruptedSnapshot(source:) -> [
+      diagnostic.Diagnostic(
+        level: diagnostic.Erro,
+        title: "corrupted snapshot",
+        label: None,
+        text: "It looks like "
+          <> ansi.italic("\"" <> source <> "\" ")
+          <> "is not a valid snapshot.\n"
+          <> "This might happen when someone modifies its content.",
+        hint: Some("try deleting the snapshot and recreating it."),
+      ),
+    ]
 
-    CannotCreateReferencedFile(file:, reason: simplifile.Eacces) ->
-      "I don't have the required permission to create the file used to track\n"
-      <> { "stale snapshots at: `" <> file <> "`.\n" }
-      <> "This usually happens when the current user doesn't have a write\n"
-      <> "permission for the system's temporary directory.\n\n"
-      <> "Hint: you can set the $TEMP environment variable to make me use a\n"
-      <> "different directory to write the reference file in."
+    CannotCreateReferencedFile(file:, reason: simplifile.Eacces) -> [
+      diagnostic.Diagnostic(
+        level: diagnostic.Erro,
+        title: "missing permission to create reference file",
+        label: None,
+        text: "I don't have the required permission to create the file used to track\n"
+          <> { "stale snapshots at: `" <> file <> "`.\n" }
+          <> "This usually happens when the current user doesn't have a write\n"
+          <> "permission for the system's temporary directory.",
+        hint: Some(
+          "you can set the $TEMP environment variable to make me use a\n"
+          <> "different directory to write the reference file in.",
+        ),
+      ),
+    ]
 
-    CannotReadReferencedFile(file:, reason: simplifile.Eacces) ->
-      "I don't have the required permission to read the file used to track\n"
-      <> { "stale snapshots at: `" <> file <> "`.\n" }
-      <> "This usually happens when the current user doesn't have a write\n"
-      <> "permission for the system's temporary directory.\n\n"
-      <> "Hint: you can set the $TEMP environment variable to make me use a\n"
-      <> "different directory to write the reference file in."
+    CannotReadReferencedFile(file:, reason: simplifile.Eacces) -> [
+      diagnostic.Diagnostic(
+        level: diagnostic.Erro,
+        title: "missing permission to read reference file",
+        label: None,
+        text: "I don't have the required permission to read the file used to track\n"
+          <> { "stale snapshots at: `" <> file <> "`.\n" }
+          <> "This usually happens when the current user doesn't have a read\n"
+          <> "permission for the system's temporary directory.",
+        hint: Some(
+          "you can set the $TEMP environment variable to make me use a\n"
+          <> "different directory to write the reference file in.",
+        ),
+      ),
+    ]
 
     CannotCreateReferencedFile(file: _, reason:) ->
-      heading(reason)
-      <> "I couldn't create the file used to track stale snapshots."
+      error_diagnostic(
+        "cannot create reference file",
+        "An unexpected error happened trying to create the file used to track stale snapshot: "
+          <> simplifile.describe_error(reason)
+          <> ".",
+      )
 
     CannotReadReferencedFile(file: _, reason:) ->
-      heading(reason)
-      <> "I couldn't read the file used to track stale snapshots."
+      error_diagnostic(
+        "cannot read reference file",
+        "An unexpected error happened trying to read the file used to track stale snapshot: "
+          <> simplifile.describe_error(reason)
+          <> ".",
+      )
 
     CannotMarkSnapshotAsReferenced(reason:) ->
-      heading(reason)
-      <> "I couldn't write to the file used to track stale snapshots."
+      error_diagnostic(
+        "cannot mark snapshot as referenced",
+        "An unexpected error happened trying to mark a snapshot as referenced: "
+          <> simplifile.describe_error(reason)
+          <> ".",
+      )
 
-    CannotFindProjectRoot(reason:)
-    | CannotGetTitles(titles.CannotFindProjectRoot(reason:)) ->
-      heading(reason)
-      <> "I couldn't locate the project's root where the snapshot's"
-      <> " folder should be."
+    CannotFindProjectRoot(reason:) ->
+      error_diagnostic(
+        "cannot find project root",
+        "An unexpected error happened trying to locate the project's root: "
+          <> simplifile.describe_error(reason)
+          <> ".",
+      )
 
     MissingReferencedFile -> {
-      "I couldn't find any information about stale snapshots.\n"
-      <> "Remember you have to run `gleam test` first, so I can find any stale "
-      <> "snapshot."
+      [
+        diagnostic.Diagnostic(
+          level: diagnostic.Erro,
+          title: "missing stale snapshot file",
+          label: None,
+          text: "I couldn't find any information about stale snapshots.",
+          hint: Some(
+            "remember you have to run `gleam test` first, so I can find any stale snapshot.",
+          ),
+        ),
+      ]
     }
 
     StaleSnapshotsFound(stale_snapshots:) -> {
@@ -689,73 +811,59 @@ fn explain(error: Error) -> String {
         })
         |> string.join(with: "\n")
 
-      "I found the following stale snapshots:\n\n"
-      <> titles
-      <> "\n\n"
-      <> "These snapshots were not referenced by any snapshot test during the "
-      <> "last `gleam test`\n"
-      <> "Hint: run `gleam run -m birdie stale delete` to delete them"
+      let text =
+        "I found the following stale snapshots:\n\n"
+        <> titles
+        <> "\n\n"
+        <> "These snapshots were not referenced by any snapshot test during the "
+        <> "last `gleam test`\n"
+
+      [
+        diagnostic.Diagnostic(
+          level: diagnostic.Erro,
+          title: "stale snapshot found",
+          label: None,
+          text:,
+          hint: Some("run `gleam run -m birdie stale delete` to delete them"),
+        ),
+      ]
     }
 
-    CannotDeleteStaleSnapshot(reason:) -> {
-      heading(reason) <> "I couldn't delete one of the stale snapshots."
-    }
+    CannotDeleteStaleSnapshot(reason:) ->
+      error_diagnostic(
+        "cannot delete stale snapshot",
+        "An unexpected error happened trying to delete a stale snapshot: "
+          <> simplifile.describe_error(reason)
+          <> ".",
+      )
 
-    CannotGetTitles(titles.CannotReadTestDirectory(reason:)) ->
-      heading(reason) <> "I couldn't list the contents of the test folder."
+    CannotReadTestDirectory(reason:) ->
+      error_diagnostic(
+        "cannot read test directroy",
+        "An unexpected error happened trying to read the constents of the test directory: "
+          <> simplifile.describe_error(reason)
+          <> ".",
+      )
 
     CannotFigureOutProjectName(reason:) ->
-      heading(reason) <> "I couldn't figure out the current project's name."
+      error_diagnostic(
+        "cannot figure out project's name",
+        "An unexpected error happened trying to figure out the project's name: "
+          <> simplifile.describe_error(reason)
+          <> ".",
+      )
 
-    CannotGetTitles(titles.CannotReadTestFile(reason:, file:)) ->
-      heading(reason)
-      <> "I couldn't read the test file "
-      <> ansi.italic("\"" <> file <> "\"\n")
+    CannotReadTestFile(reason:, file:) ->
+      error_diagnostic(
+        "cannot read test file",
+        "An unexpected error happened trying to read "
+          <> ansi.italic("\"" <> file <> "\": ")
+          <> simplifile.describe_error(reason)
+          <> ".",
+      )
 
-    CannotGetTitles(titles.DuplicateLiteralTitles(
-      title:,
-      one: titles.TestInfo(file: one_file, test_name: one_test_name),
-      other: titles.TestInfo(file: other_file, test_name: other_test_name),
-    )) -> {
-      let same_file = one_file == other_file
-      let same_function = one_test_name == other_test_name
-      let location = case same_file, same_function {
-        True, True ->
-          "Both tests are defined in:\n\n  "
-          <> ansi.italic(to_function_name(one_file, one_test_name))
-        _, _ ->
-          "One test is defined in:\n\n  "
-          <> ansi.italic(to_function_name(one_file, one_test_name))
-          <> "\n\nWhile the other is defined in:\n\n  "
-          <> ansi.italic(to_function_name(other_file, other_test_name))
-      }
-
-      "it looks like there's some snapshot tests sharing the same title:
-
-  " <> ansi.italic("\"" <> title <> "\"") <> "
-
-Snapshot titles " <> ansi.bold("must be unique") <> " or you would run into strange diffs
-when reviewing them, try changing one of those.
-" <> location
-    }
-
-    CannotGetTitles(titles.OverlappingPrefixes(..)) ->
-      panic as "Prefixes are not implemented yet"
-
-    CannotGetTitles(titles.PrefixOverlappingWithLiteralTitle(..)) ->
-      panic as "Prefixes are not implemented yet"
+    AnalysisError(errors) -> list.map(errors, analyser.error_to_diagnostic)
   }
-
-  message
-}
-
-fn to_function_name(file: String, function_name: String) -> String {
-  let module_name = case file {
-    "./test/" <> rest -> filepath.strip_extension(rest)
-    _ -> filepath.strip_extension(file)
-  }
-
-  module_name <> ".{" <> function_name <> "}"
 }
 
 type InfoLine {
@@ -773,10 +881,10 @@ fn snapshot_default_lines(snapshot: Snapshot(status)) -> List(InfoLine) {
   let Snapshot(title:, content: _, info:) = snapshot
   case info {
     None -> [InfoLineWithTitle(title, SplitWords, "title")]
-    Some(titles.TestInfo(file:, test_name:)) -> [
+    Some(SnapshotInfo(file:, test_function_name:)) -> [
       InfoLineWithTitle(title, SplitWords, "title"),
       InfoLineWithTitle(file, Truncate, "file"),
-      InfoLineWithTitle(test_name, Truncate, "name"),
+      InfoLineWithTitle(test_function_name, Truncate, "name"),
     ]
   }
 }
@@ -1120,48 +1228,65 @@ fn run_command(command: Command) -> Nil {
 
 fn review() -> Result(Nil, Error) {
   use snapshots_folder <- result.try(snapshot_folder())
-  let get_titles = titles.from_test_directory()
-  use titles <- result.try(result.map_error(get_titles, CannotGetTitles))
-  use _ <- result.try(update_accepted_snapshots(snapshots_folder, titles))
+  use analyser <- result.try(analyse_test_directory())
+  use _ <- result.try(update_accepted_snapshots(snapshots_folder, analyser))
 
   // Before reviewing, we want to update the files of all the existing snapshots
   // because they might have been moved to a different module, changing their
   // source `file`.
-  use _ <- result.try(do_review(snapshots_folder, titles))
+  use _ <- result.try(do_review(snapshots_folder, analyser))
   Ok(Nil)
 }
 
 fn update_accepted_snapshots(
   snapshots_folder: String,
-  titles: titles.Titles,
+  analyser: Analyser,
 ) -> Result(Nil, Error) {
   use accepted_snapshots <- result.try(list_accepted_snapshots(snapshots_folder))
   use accepted_snapshot <- list.try_each(accepted_snapshots)
   use snapshot <- result.try(read_accepted(accepted_snapshot))
   case snapshot {
     None -> Ok(Nil)
-    Some(Snapshot(title:, content: _, info:) as snapshot) ->
-      case titles.find(titles, title), info {
-        Ok(match), Some(existing_info) if match.info != existing_info ->
-          Snapshot(..snapshot, info: Some(match.info))
+    Some(Snapshot(title:, content: _, info: existing_info) as snapshot) -> {
+      case get_info_for_snapshot(analyser, titled: title), existing_info {
+        Ok(new_info), Some(existing_info) if new_info != existing_info ->
+          Snapshot(..snapshot, info: Some(new_info))
           |> serialise
           |> simplifile.write(to: accepted_snapshot)
           |> result.map_error(CannotAcceptSnapshot(_, accepted_snapshot))
 
-        Ok(match), None ->
-          Snapshot(..snapshot, info: Some(match.info))
+        Ok(info), None ->
+          Snapshot(..snapshot, info: Some(info))
           |> serialise
           |> simplifile.write(to: accepted_snapshot)
           |> result.map_error(CannotAcceptSnapshot(_, accepted_snapshot))
 
         _, _ -> Ok(Nil)
       }
+    }
+  }
+}
+
+/// If there's a _single_ snapshot with the given title, this return information
+/// about it.
+/// If there's no snapshot, or there's multiple ones then that's an error! We
+/// can't reliably return information about because it's either missing, or
+/// there's multiple snapshots sharing the same title and it's impossible to
+/// know which one we're referring to.
+fn get_info_for_snapshot(
+  analyser: Analyser,
+  titled title: String,
+) -> Result(SnapshotInfo, Nil) {
+  case analyser.get_snapshot_tests(analyser, titled: title) {
+    [] | [_, _, ..] -> Error(Nil)
+    [#(uri, analyser.SnapshotTest(test_function_name:, ..))] ->
+      Ok(SnapshotInfo(file: uri.path, test_function_name:))
   }
 }
 
 fn do_review(
   snapshots_folder: String,
-  titles: titles.Titles,
+  analyser: Analyser,
 ) -> Result(Nil, Error) {
   use new_snapshots <- result.try(list_new_snapshots(in: snapshots_folder))
   case list.length(new_snapshots) {
@@ -1172,7 +1297,7 @@ fn do_review(
     }
     // If there's snapshots to review start the interactive session.
     n -> {
-      let result = review_loop(new_snapshots, titles, 1, n, ShowDiff)
+      let result = review_loop(new_snapshots, analyser, 1, n, ShowDiff)
       // Despite the review process ending well or with an error, we want to
       // clear the screen of any garbage before showing the error explanation
       // or the happy completion string.
@@ -1192,7 +1317,7 @@ fn do_review(
 /// Reviews all the new snapshots one by one.
 fn review_loop(
   new_snapshot_paths: List(String),
-  titles: titles.Titles,
+  analyser: Analyser,
   current: Int,
   out_of: Int,
   mode: ReviewMode,
@@ -1207,11 +1332,12 @@ fn review_loop(
 
       // We need to add to the new test info about its location and the function
       // it's defined in.
-      let new_snapshot_info = case titles.find(titles, new_snapshot.title) {
-        Ok(titles.Prefix(info:, ..)) | Ok(titles.Literal(info:)) -> Some(info)
-        Error(_) -> None
-      }
-      let new_snapshot = Snapshot(..new_snapshot, info: new_snapshot_info)
+      let new_snapshot =
+        Snapshot(
+          ..new_snapshot,
+          info: get_info_for_snapshot(analyser, titled: new_snapshot.title)
+            |> option.from_result,
+        )
 
       let accepted_snapshot_path = to_accepted_path(new_snapshot_path)
       use accepted_snapshot <- result.try(read_accepted(accepted_snapshot_path))
@@ -1237,19 +1363,19 @@ fn review_loop(
       use choice <- result.try(ask_choice(mode))
       case choice {
         AcceptSnapshot -> {
-          use _ <- result.try(accept_snapshot(new_snapshot_path, titles))
-          review_loop(rest, titles, current + 1, out_of, mode)
+          use _ <- result.try(accept_snapshot(new_snapshot_path, analyser))
+          review_loop(rest, analyser, current + 1, out_of, mode)
         }
         RejectSnapshot -> {
           use _ <- result.try(reject_snapshot(new_snapshot_path))
-          review_loop(rest, titles, current + 1, out_of, mode)
+          review_loop(rest, analyser, current + 1, out_of, mode)
         }
         SkipSnapshot -> {
-          review_loop(rest, titles, current + 1, out_of, mode)
+          review_loop(rest, analyser, current + 1, out_of, mode)
         }
         ToggleDiffView -> {
           let mode = toggle_mode(mode)
-          review_loop(new_snapshot_paths, titles, current, out_of, mode)
+          review_loop(new_snapshot_paths, analyser, current, out_of, mode)
         }
       }
     }
@@ -1336,9 +1462,8 @@ fn accept_all() -> Result(Nil, Error) {
   use snapshots_folder <- result.try(snapshot_folder())
   use new_snapshots <- result.try(list_new_snapshots(in: snapshots_folder))
 
-  let get_titles = titles.from_test_directory()
-  use titles <- result.try(result.map_error(get_titles, CannotGetTitles))
-  use _ <- result.try(update_accepted_snapshots(snapshots_folder, titles))
+  use analyser <- result.try(analyse_test_directory())
+  use _ <- result.try(update_accepted_snapshots(snapshots_folder, analyser))
 
   case list.length(new_snapshots) {
     0 -> io.println("No new snapshots to accept.")
@@ -1346,7 +1471,7 @@ fn accept_all() -> Result(Nil, Error) {
     n -> io.println("Accepting " <> int.to_string(n) <> " new snapshots.")
   }
 
-  list.try_each(new_snapshots, accept_snapshot(_, titles))
+  list.try_each(new_snapshots, accept_snapshot(_, analyser))
 }
 
 fn reject_all() -> Result(Nil, Error) {
@@ -1354,9 +1479,8 @@ fn reject_all() -> Result(Nil, Error) {
   use snapshots_folder <- result.try(snapshot_folder())
   use new_snapshots <- result.try(list_new_snapshots(in: snapshots_folder))
 
-  let get_titles = titles.from_test_directory()
-  use titles <- result.try(result.map_error(get_titles, CannotGetTitles))
-  use _ <- result.try(update_accepted_snapshots(snapshots_folder, titles))
+  use analyser <- result.try(analyse_test_directory())
+  use _ <- result.try(update_accepted_snapshots(snapshots_folder, analyser))
 
   case list.length(new_snapshots) {
     0 -> io.println("No new snapshots to reject.")
@@ -1365,6 +1489,61 @@ fn reject_all() -> Result(Nil, Error) {
   }
 
   list.try_each(new_snapshots, reject_snapshot)
+}
+
+/// This finds the current Gleam project's test directory and analyses all the
+/// modules inside to find snapshot tests and information related to them.
+/// This could fail under different circumstances:
+/// - If the file system operations (like reading) fail, should technically
+///   never happen in a normal scenario
+/// - OR if the test directory contains snapshots with duplicate titles!
+///   This is something that could happen and we need to show a nice error
+///   message.
+fn analyse_test_directory() -> Result(Analyser, Error) {
+  use root <- result.try(
+    project.find_root()
+    |> result.map_error(CannotFindProjectRoot),
+  )
+  use files <- result.try(
+    filepath.join(root, "test")
+    |> simplifile.get_files
+    |> result.map_error(CannotReadTestDirectory),
+  )
+
+  use analyser <- result.try(
+    list.try_fold(over: files, from: analyser.new(), with: fn(analyser, file) {
+      // If the file is not a gleam file, we just keep going...
+      let is_gleam_file = filepath.extension(file) == Ok("gleam")
+      use <- bool.guard(when: !is_gleam_file, return: Ok(analyser))
+
+      //...otherwise we try and read its content and analyse it
+      use source <- result.try(
+        simplifile.read(file)
+        |> result.map_error(CannotReadTestFile(_, file)),
+      )
+      let path = filepath_to_uri(file)
+      Ok(analyser.analyse(analyser, analyser.Module(path:, source:)))
+    }),
+  )
+
+  // If we could successfully read all the modules, now we can check for errors.
+  // TODO)) What about warnings?
+  case analyser.errors(analyser) {
+    [] -> Ok(analyser)
+    [_, ..] as errors -> Error(AnalysisError(errors))
+  }
+}
+
+fn filepath_to_uri(path: String) -> uri.Uri {
+  uri.Uri(
+    scheme: Some("file"),
+    userinfo: None,
+    host: None,
+    port: None,
+    path:,
+    query: None,
+    fragment: None,
+  )
 }
 
 fn stale_snapshots_file_names() -> Result(List(String), Error) {
@@ -1430,7 +1609,11 @@ fn report_status(result: Result(Nil, Error)) -> Nil {
       exit(0)
     }
     Error(error) -> {
-      io.println_error(ansi.red("Error: ") <> explain(error))
+      to_diagnostic(error)
+      |> list.map(diagnostic.to_string)
+      |> string.join("\n\n")
+      |> io.println_error
+
       exit(1)
     }
   }

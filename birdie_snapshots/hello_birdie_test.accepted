@@ -1,7 +1,7 @@
 ---
-version: 1.5.2
+version: 1.5.5
 title: hello birdie test
-file: ./test/birdie_test.gleam
+file: file:./test/birdie_test.gleam
 test_name: hello_birdie_test
 ---
 🐦‍⬛ smile for the birdie!
