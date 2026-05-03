@@ -1,7 +1,7 @@
 ---
 version: 1.5.5
 title: single line diagnostic with secondary label right below
-file: file:./test/birdie_test/diagnostic_test.gleam
+file: ./test/birdie_test/diagnostic_test.gleam
 test_name: single_line_diagnostic_with_secondary_label_right_below_test
 ---
 [1m[33mwarning[39m: example[22m

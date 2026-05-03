@@ -1,5 +1,5 @@
 ---
-version: 1.4.1
+version: 1.5.4
 title: can read the snap titles from the project itself
 file: ./test/titles_test.gleam
 test_name: can_read_the_snap_titles_from_the_project_itself_test
@@ -16,6 +16,3 @@ can read the snap titles from the project itself [can_read_the_snap_titles_from_
 complex function test                    [complex_function_test - ./test/birdie_test.gleam]
 hello birdie test                        [hello_birdie_test - ./test/birdie_test.gleam]
 list test                                [list_test - ./test/birdie_test.gleam]
-
---- PREFIXES ---
-

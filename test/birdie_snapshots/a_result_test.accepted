@@ -1,7 +1,7 @@
 ---
 version: 1.5.5
 title: a result test
-file: file:./test/birdie_test.gleam
+file: ./test/birdie_test.gleam
 test_name: a_result_test
 ---
 Ok(11)

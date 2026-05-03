@@ -1,7 +1,7 @@
 ---
 version: 1.5.5
 title: multi line diagnostic
-file: file:./test/birdie_test/diagnostic_test.gleam
+file: ./test/birdie_test/diagnostic_test.gleam
 test_name: multi_line_diagnostic_test
 ---
 [1m[31merror[39m: example[22m

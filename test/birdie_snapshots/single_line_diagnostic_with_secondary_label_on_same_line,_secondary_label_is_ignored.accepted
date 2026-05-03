@@ -1,7 +1,7 @@
 ---
 version: 1.5.5
 title: single line diagnostic with secondary label on same line, secondary label is ignored
-file: file:./test/birdie_test/diagnostic_test.gleam
+file: ./test/birdie_test/diagnostic_test.gleam
 test_name: single_line_diagnostic_with_secondary_label_on_same_line_test
 ---
 [1m[31merror[39m: example[22m

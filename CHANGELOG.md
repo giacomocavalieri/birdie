@@ -2,6 +2,9 @@
 
 ## 1.6.0 - unreleased
 
+- Birdie snapshots are now located under the `test/birdie_snapshots` directory.
+  When running a `gleam run -m birdie` for the first time in an old project,
+  birdie will automatically move any existing snapshot.
 - The look of birdie's error messages has been improved.
 
 ## 1.5.5 - 2026-04-18

@@ -87,6 +87,14 @@ type Error {
 
   /// This happens if there's any analysis error with the project modules.
   AnalysisError(errors: List(analyser.Error))
+
+  /// This happens when it's not possible to move the legacy snapshot folder to
+  /// the new expected location under tests.
+  CannotMigrateBirdieSnapshotDirectory(
+    reason: simplifile.FileError,
+    from: String,
+    to: String,
+  )
 }
 
 // --- THE SNAPSHOT TYPE -------------------------------------------------------
@@ -173,14 +181,43 @@ fn is_windows() -> Bool
 ///
 fn snapshot_folder() -> Result(String, Error) {
   use <- global_value.create_with_unique_name("birdie.snapshot_folder")
-  let result = result.map_error(project.find_root(), CannotFindProjectRoot)
-  use project_root <- result.try(result)
-  let snapshots_folder = filepath.join(project_root, "birdie_snapshots")
 
-  case simplifile.create_directory(snapshots_folder) {
-    Ok(Nil) | Error(Eexist) -> Ok(snapshots_folder)
+  use snapshot_folder <- result.try(snapshot_folder_name())
+  use legacy_snapshot_folder <- result.try(legacy_snapshot_folder_name())
+
+  case simplifile.is_directory(snapshot_folder) {
+    Ok(True) -> Ok(snapshot_folder)
+    Ok(False) | Error(Enoent) ->
+      case simplifile.is_directory(legacy_snapshot_folder) {
+        Ok(True) -> Ok(legacy_snapshot_folder)
+        Ok(False) | Error(Enoent) ->
+          case simplifile.create_directory(snapshot_folder) {
+            Ok(_) -> Ok(snapshot_folder)
+            Error(error) -> Error(CannotCreateSnapshotsFolder(error))
+          }
+        Error(error) -> Error(CannotCreateSnapshotsFolder(error))
+      }
     Error(error) -> Error(CannotCreateSnapshotsFolder(error))
   }
+}
+
+fn snapshot_folder_name() -> Result(String, Error) {
+  use <- global_value.create_with_unique_name("birdie.snapshot_folder_name")
+  let result = result.map_error(project.find_root(), CannotFindProjectRoot)
+  use project_root <- result.try(result)
+
+  project_root
+  |> filepath.join("test")
+  |> filepath.join("birdie_snapshots")
+  |> Ok
+}
+
+/// This returns the name of the snapshot folder that was used before `1.6.0`.
+fn legacy_snapshot_folder_name() -> Result(String, Error) {
+  use <- global_value.create_with_unique_name("birdie.legacy_snapshot_folder")
+  let result = result.map_error(project.find_root(), CannotFindProjectRoot)
+  use project_root <- result.try(result)
+  Ok(filepath.join(project_root, "birdie_snapshots"))
 }
 
 /// Performs a snapshot test with the given title, saving the content to a new
@@ -862,6 +899,16 @@ fn to_diagnostic(error: Error) -> List(diagnostic.Diagnostic) {
           <> ".",
       )
 
+    CannotMigrateBirdieSnapshotDirectory(reason:, from:, to:) ->
+      error_diagnostic(
+        "cannot migrate snapshot directory",
+        "An unexpected error happened when trying to migrate\n"
+          <> ansi.italic("\"" <> from <> "\" to ")
+          <> ansi.italic("\"" <> to <> "\"\n")
+          <> "The error is: "
+          <> simplifile.describe_error(reason),
+      )
+
     AnalysisError(errors) -> list.map(errors, analyser.error_to_diagnostic)
   }
 }
@@ -1203,26 +1250,68 @@ type Answer {
 }
 
 fn run_command(command: Command) -> Nil {
-  case command {
-    Review -> report_status(review())
-    Accept -> report_status(accept_all())
-    Reject -> report_status(reject_all())
-    Stale(CheckStale) -> report_status(check_stale())
-    Stale(DeleteStale) -> report_status(delete_stale())
+  case migrate_from_old_directory() {
+    Error(diagnostic) -> report_status(Error(diagnostic))
+    Ok(_) -> {
+      case command {
+        Review -> report_status(review())
+        Accept -> report_status(accept_all())
+        Reject -> report_status(reject_all())
+        Stale(CheckStale) -> report_status(check_stale())
+        Stale(DeleteStale) -> report_status(delete_stale())
 
-    Help ->
-      io.println(cli.help_text(
-        birdie_version,
-        for: Help,
-        explaining: FullCommand,
-      ))
+        Help ->
+          io.println(cli.help_text(
+            birdie_version,
+            for: Help,
+            explaining: FullCommand,
+          ))
 
-    WithHelpOption(command:, explained:) ->
-      io.println(cli.help_text(
-        birdie_version,
-        for: command,
-        explaining: explained,
+        WithHelpOption(command:, explained:) ->
+          io.println(cli.help_text(
+            birdie_version,
+            for: command,
+            explaining: explained,
+          ))
+      }
+    }
+  }
+}
+
+fn migrate_from_old_directory() -> Result(Nil, Error) {
+  // We're not using the snapshot_folder function, because we don't want to
+  // create that directroy automatically if it doesn't exist!
+  use snapshot_folder <- result.try(snapshot_folder_name())
+  use legacy_snapshot_folder <- result.try(legacy_snapshot_folder_name())
+  case simplifile.is_directory(legacy_snapshot_folder) {
+    // If the legacy directory doesn't exist, or it's not a directory at all
+    // there's no need to do anything.
+    Error(simplifile.Enoent) -> Ok(Nil)
+    Ok(False) -> Ok(Nil)
+
+    Error(reason) ->
+      Error(CannotReadSnapshots(reason:, folder: legacy_snapshot_folder))
+
+    Ok(True) -> {
+      diagnostic.Diagnostic(
+        level: diagnostic.Warn,
+        title: "moved snapshots directory",
+        label: None,
+        hint: None,
+        text: "Starting from 1.6 birdie is using the `test/birdie_snapshots` directory to
+store snapshot tests, so `birdie_snapshots` was moved there.",
+      )
+      |> diagnostic.to_string
+      |> string.append("\n")
+      |> io.println
+
+      simplifile.rename(legacy_snapshot_folder, snapshot_folder)
+      |> result.map_error(CannotMigrateBirdieSnapshotDirectory(
+        reason: _,
+        from: legacy_snapshot_folder,
+        to: snapshot_folder,
       ))
+    }
   }
 }
 
