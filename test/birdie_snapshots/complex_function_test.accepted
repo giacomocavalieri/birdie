@@ -1,5 +1,5 @@
 ---
-version: 1.5.5
+version: 1.6.0
 title: complex function test
 file: ./test/birdie_test.gleam
 test_name: complex_function_test

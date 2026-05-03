@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.6.0 - unreleased
+## 2.0.0 - 2026-05-03
 
 - Birdie snapshots are now located under the `test/birdie_snapshots` directory.
   When running a `gleam run -m birdie` for the first time in an old project,

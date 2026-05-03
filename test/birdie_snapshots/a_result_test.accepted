@@ -1,5 +1,5 @@
 ---
-version: 1.5.5
+version: 1.6.0
 title: a result test
 file: ./test/birdie_test.gleam
 test_name: a_result_test
