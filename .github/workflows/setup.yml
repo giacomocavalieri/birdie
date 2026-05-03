@@ -11,5 +11,5 @@ jobs:
       - uses: erlef/setup-beam@v1
         with:
           otp-version: "28"
-          gleam-version: "1.13.0"
+          gleam-version: "1.16.0"
           rebar3-version: "3"
