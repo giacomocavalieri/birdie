@@ -1,0 +1,5 @@
+---
+version: 2.0.0
+title: this title\\n is displayed on a single line
+---
+"this snapshot's title should be on two lines"

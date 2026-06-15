@@ -386,7 +386,7 @@ fn deserialise(raw: String) -> Result(Snapshot(a), Nil) {
         content,
       )) ->
       Ok(Snapshot(
-        title: string.trim(title),
+        title: unescape_title(title) |> string.trim,
         content: trim_content(content, based_on: version),
         info: None,
       ))
@@ -416,7 +416,7 @@ fn deserialise(raw: String) -> Result(Snapshot(a), Nil) {
             content,
           )) ->
           Ok(Snapshot(
-            title: string.trim(title),
+            title: unescape_title(title) |> string.trim,
             content: trim_content(content, based_on: version),
             info: Some(SnapshotInfo(
               file: string.trim(file),
@@ -427,6 +427,20 @@ fn deserialise(raw: String) -> Result(Snapshot(a), Nil) {
         Ok(_) | Error(_) -> Error(Nil)
       }
   }
+}
+
+fn unescape_title(title: String) -> String {
+  // All backslashes have been escaped as "\\\\"
+  string.split(title, on: "\\\\")
+  |> list.map(string.replace(in: _, each: "\\n", with: "\n"))
+  |> string.join(with: "\\")
+}
+
+fn escape_title(title: String) -> String {
+  // We escape newlines and backslash so that the title will be on a single line
+  // in the file once it's saved.
+  string.replace(title, each: "\n", with: "\\n")
+  |> string.replace(each: "\\", with: "\\\\")
 }
 
 /// Birdie started adding newlines to the end of files starting from `1.4.0`,
@@ -466,7 +480,7 @@ fn serialise(snapshot: Snapshot(New)) -> String {
       // easier to parse.
       // Is this the best course of action? Probably not.
       // Does this make my life a lot easier? Absolutely! 😁
-      "title: " <> string.replace(title, each: "\n", with: "\\n"),
+      "title: " <> escape_title(title),
     ],
     info_lines,
     ["---", content],

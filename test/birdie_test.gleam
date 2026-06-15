@@ -16,6 +16,16 @@ pub fn a_result_test() {
   |> birdie.snap(title: "a result test")
 }
 
+pub fn newlines_in_title_are_shown_normally_test() {
+  string.inspect("this snapshot's title should be on two lines")
+  |> birdie.snap(title: "this title\n contains a newline")
+}
+
+pub fn escaped_newlines_in_title_stay_escaped_test() {
+  string.inspect("this snapshot's title should be on two lines")
+  |> birdie.snap(title: "this title\\n is displayed on a single line")
+}
+
 pub fn list_test() {
   "[ 1, 2, 3, 4 ]"
   |> birdie.snap(title: "list test")

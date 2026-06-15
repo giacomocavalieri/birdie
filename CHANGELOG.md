@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.0.1 - 2026-06-15
+
+- Fixed a bug where newline characters would be displayed as escaped when
+  displaying a snapshot title containing one.
+
 ## 2.0.0 - 2026-05-03
 
 - Birdie snapshots are now located under the `test/birdie_snapshots` directory.
