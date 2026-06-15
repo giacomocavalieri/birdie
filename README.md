@@ -92,7 +92,7 @@ see better, more focused diffs.
 ### Why is the snapshot content a `String`? I want to snapshot other things!
 
 Birdie will only ever accept `String` values and it's up to you to turn your
-own Gleam types into a `String` before snapping those: this way you have total
+own Gleam types into a `String` before snapping those. This way you have total
 freedom and will be able to choose a format that makes sense to you and makes
 things easier to review!
 
@@ -109,5 +109,5 @@ This package was heavily inspired by the excellent Rust library
 ## Contributing
 
 If you think there's any way to improve this package, or if you spot a bug don't
-be afraid to open PRs, issues or requests of any kind!
+be afraid to open PRs, issues, or requests of any kind!
 Any contribution is welcome 💜

@@ -109,12 +109,12 @@
 
 ## v1.1.6 - 2024-05-28
 
-- ⬆️ Change dependencies contraints
+- ⬆️ Change dependencies constraints
 
 ## v1.1.5 - 2024-05-10
 
 - 🧑🏻‍💻 No longer fail the process review if Glance cannot parse a test module.
-  Instead title data will simply be omitted.
+  Instead, title data will simply be omitted.
 
 ## v1.1.4 - 2024-04-26
 
@@ -136,7 +136,7 @@
 
 ## v1.1.0 - 2024-03-12
 
-- ✨ Fail the review if there's tests with duplicate titles
+- ✨ Fail the review if there are tests with duplicate titles
 
 ## v1.0.4 - 2024-02-01
 
