@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.2 - 2026-07-16
+
+- Updated the `glance` constraint to use the latest `v7.0.0`.
+
 ## 2.0.1 - 2026-06-15
 
 - Fixed a bug where newline characters would be displayed as escaped when
